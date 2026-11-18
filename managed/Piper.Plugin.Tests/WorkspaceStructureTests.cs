@@ -70,6 +70,9 @@ internal static class WorkspaceStructureTests
         // is not open, on any page, and survives a view being republished.
         Check(sidebar.Count(w => w.Id == "stop.one" && w.Text == "Stop") == 1 && sidebar.Count(w => w.Id == "stop.two" && w.Text == "Stop") == 1,
             "A robot in the sidebar has no STOP of its own");
+        // Neither fixture robot has an adapter, so there is nothing to stop: the button is shown but off.
+        Check(sidebar.Where(w => w.Id is "stop.one" or "stop.two").All(w => w.Enabled == false && w.Hint!.Contains("not connected", StringComparison.Ordinal)),
+            "A robot that is not connected still offered a live Stop");
         foreach (long epoch in new long[] { 0, 7 })
             Check(WorkspaceEventScope.Wrap(epoch, "one", "stop.two") == "stop.two", "A sidebar STOP was tied to the open robot or to one published view");
         Check(plugin.CaptureStopProfile("stop.two", plugin.preferences.Robots!.Single(p => p.Id == "one"))?.Id == "two" &&

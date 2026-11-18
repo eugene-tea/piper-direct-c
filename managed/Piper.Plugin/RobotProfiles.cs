@@ -189,7 +189,7 @@ public sealed partial class PipersPlugin
             Widget.NavItem("profiles.select." + p.Id, ProfileLabel(p), "robot-arm", !bench && p.Id == ActiveProfile.Id) with
                 { Hint = p.CanDeviceId.Length == 0 ? "Assign an adapter in this robot's Setup tab" : "Open " + p.Name },
             Widget.Button(RobotProfileRouting.RobotStopPrefix + p.Id, "Stop") with { Height = 28, Width = 52, Appearance = "danger-quiet",
-                Hint = "Stop " + p.Name + " now. Holding torque can be lost: support the arm." },
+                Enabled = StopAvailable(p), Hint = StopHint(p) },
             Widget.Label("profiles.row.pad." + p.Id, "") with { Width = 16 }) with { Spacing = 4 })).ToList();
         robots.Add(Widget.NavItem("profiles.add", "Add robot", "plus", false) with { Hint = "Add another arm to this bench",
             Enabled = preferences.Robots!.Length < RobotProfileRouting.MaximumProfiles });
@@ -209,8 +209,16 @@ public sealed partial class PipersPlugin
             Widget.NavGroup("sidebar.settings.heading", "Settings", "gear", serverPage),
             Widget.NavItem("workspace.settings.diagnostics@nav", "Arm server", "server", serverPage) with { Hint = "Start, restart and inspect the server that runs every arm and gripper" }]);
         // The Settings sidebar's own width and row gap; rows reach both edges so the lit row spans it.
-        return Widget.Column("sidebar", rows.ToArray()) with { Width = 220, Padding = 4, Spacing = 2, Appearance = "sidebar" };
+        // The lighter panel grey of the editor's Settings sidebar, not a black strip.
+        return Widget.Column("sidebar", rows.ToArray()) with { Width = 220, Padding = 4, Spacing = 2, Appearance = "panel" };
     }
+
+    /// <summary>A robot with no adapter, or one the arm server reports as absent, has nothing to stop.
+    /// A robot that was last seen present keeps its Stop even if feedback has since gone quiet.</summary>
+    private bool StopAvailable(RobotProfile profile) => ProfileStatus(profile) is not ("unassigned" or "offline");
+    private string StopHint(RobotProfile profile) => StopAvailable(profile)
+        ? "Stop " + profile.Name + " now. Holding torque can be lost: support the arm."
+        : profile.Name + " is not connected, so there is nothing to stop.";
 
     private string ProfileLabel(RobotProfile profile) => profile.Name + "\n" + ProfileStatus(profile);
 
@@ -279,6 +287,7 @@ public sealed partial class PipersPlugin
         foreach (var profile in preferences.Robots!)
         {
             patches["profiles.select." + profile.Id] = new() { ["text"] = ProfileLabel(profile), ["enabled"] = true };
+            patches[RobotProfileRouting.RobotStopPrefix + profile.Id] = new() { ["enabled"] = StopAvailable(profile), ["hint"] = StopHint(profile) };
             patches["overview.state." + profile.Id] = new() { ["text"] = "● " + ProfileStatus(profile) };
             patches["overview.next." + profile.Id] = new() { ["text"] = OverviewNext(ProfileStatus(profile)) };
             var assignment = SceneArmAssignment(profile, settingsRobotOptions);
