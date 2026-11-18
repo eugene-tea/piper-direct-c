@@ -211,7 +211,7 @@ public sealed partial class PipersPlugin
             Widget.NavItem("workspace.camera.bench@nav", "Bench camera", "camera", benchCamera),
             Widget.Separator("sidebar.settings.separator"),
             Widget.NavGroup("sidebar.settings.heading", "Settings", "gear", serverPage),
-            Widget.NavItem("workspace.settings.diagnostics@nav", "Arm server", "server", serverPage)]);
+            Widget.NavItem("workspace.settings.diagnostics@nav", ServerLabel, "server", serverPage) with { Appearance = ServerLive ? "success" : "muted" }]);
         // The Settings sidebar's own width and row gap; rows reach both edges so the lit row spans it.
         // The lighter panel grey of the editor's Settings sidebar, not a black strip.
         return Widget.Column("sidebar", rows.ToArray()) with { Width = 244, Padding = 4, Spacing = 2, Appearance = "panel" };

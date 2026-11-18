@@ -15,10 +15,12 @@ public sealed partial class PipersPlugin
             WorkspacePage.Overview => OverviewPage(), WorkspacePage.Follow => FollowPage(),
             WorkspacePage.Settings => SettingsPage(cameraChoices),
             WorkspacePage.Recording => RecordingPage(), WorkspacePage.Replay => ReplayPage(), WorkspacePage.Camera => CameraDetailPage(cameraChoices), _ => ControlsPage() };
-        var content = Widget.Column("controls",
+        // A robot page is a tabbed panel: the robot's own header and its tab strip sit on the dark
+        // band, and the open tab runs into the lighter page below it. Nothing may come between the
+        // strip and the page, or the open tab stops reading as part of what it shows.
+        var top = Widget.Column("workspace.top", Widget.Column("workspace.top.header",
             Widget.Column("header", Widget.Row("header.title", Widget.Label("workspace.robot-name", ActiveProfile.Name) with { Appearance = "heading", Height = 30 },
-                Widget.Label("workspace.connection.dot", "●") with { Width = 14, Height = 30, Appearance = "muted" },
-                Widget.Label("workspace.connection", "Connecting…") with { Height = 30 }),
+                StatusBadge("workspace.connection.dot", "muted", Widget.Label("workspace.connection", "Connecting…") with { Height = 30 })),
                 Widget.Label("workspace.next", "") with { Visible = false, Hint = "The one thing to do next for this robot." },
                 Widget.Row("header.actions", Widget.Button("enable", "Enable robot") with { Appearance = "primary" },
                     Widget.Button("disable", "Disable") with { Width = 76, Hint = "Support the arm before releasing holding torque." },
@@ -26,9 +28,11 @@ public sealed partial class PipersPlugin
                     Widget.Button("stop", "Stop") with { Width = 64, Appearance = "danger-quiet", Enabled = StopAvailable(ActiveProfile), Hint = StopHint(ActiveProfile) }) with { Visible = Navigation.Page == WorkspacePage.Controls }) with { Visible = !bench },
             Widget.Label("workspace.primary-action", "") with { Height = 48, Visible = false },
             Widget.Label("workspace.action-error", "") with { Height = 64, Visible = false, Appearance = "danger" },
+            Widget.Label("workspace.page-title", BenchPageTitle()) with { Appearance = "heading", Visible = bench }) with { Padding = 18, Spacing = 12 },
             // Tabs belong to the selected robot. A bench page is not about one robot and shows its own title.
-            Widget.Tabs("workspace.pages", WorkspaceTabs.RobotTabs, WorkspaceTabs.PageIndex(Navigation)) with { Icons = ["", "", "", "gear"], Visible = !bench },
-            Widget.Label("workspace.page-title", BenchPageTitle()) with { Appearance = "heading", Visible = bench },
+            Widget.Tabs("workspace.pages", WorkspaceTabs.RobotTabs, WorkspaceTabs.PageIndex(Navigation)) with { Icons = ["", "", "", "gear"], Visible = !bench })
+            with { Spacing = 0, Appearance = bench ? null : "sidebar" };
+        var page = Widget.Column("workspace.page",
             Widget.Row("safety", Widget.Label("safety.text", "Make sure it is safe to move the robot."),
                 Widget.Button("safety.accept", "Enable robot") with { Appearance = "primary" }, Widget.Button("safety.cancel", "Cancel")) with { Visible = showClearanceConfirmation, Padding = 12, Appearance = "panel" },
             ResetCompletionConfirmation(),
@@ -41,6 +45,7 @@ public sealed partial class PipersPlugin
                 Widget.Button("recovery.home", "Arm resting, path clear — recover to zero") with { Enabled = false },
                 Widget.Button("recovery.guide.cancel", "Cancel recovery guide") with { Visible = false, Appearance = "quiet" }) with { Visible = false, Padding = 12, Spacing = 8, Appearance = "panel" },
             body, Widget.Label("status", "Connecting…") with { Height = 28, Appearance = "muted", Visible = !bench }) with { Padding = 18, Spacing = 12 };
+        var content = Widget.Column("controls", top, page) with { Spacing = 0 };
         return Widget.Row("workspace", RobotSidebar(), TidyLayout(content, inColumn: false)) with { Spacing = 0 };
     }
 
@@ -85,9 +90,9 @@ public sealed partial class PipersPlugin
             Widget.Button($"joint.{i}.plus", "+") with { Width = 28 }, Widget.Button($"joint.{i}.zero", "0") with { Width = 36 }) with { Spacing = 4 });
         widgets.Add(Widget.Row("motion", Widget.Button("zero.all", "Move all to zero") with { Width = 160 },
             Widget.Label("motion.progress", "Idle") with { Height = 28 }, Widget.Button("motion.hold", "Stop") with { Width = 65, Enabled = false }));
-        widgets.Add(Widget.Row("preferences", PreferenceControl("speed", "Speed", preferences.Speed, 0, 100, 1, "Percentage of this robot's reported speed limit. The °/s readout is its target ceiling."),
+        widgets.Add(Widget.Column("preferences", PreferenceControl("speed", "Speed", preferences.Speed, 0, 100, 1, "Percentage of this robot's reported speed limit. The °/s readout is its target ceiling."),
             PreferenceControl("step", "Jog step", preferences.Step, .1, 5, .1, "Degrees per minus/plus press. The joint slider sets an absolute angle."),
-            PreferenceControl("tolerance", "Tolerance", preferences.Tolerance, .05, 1, .05, "Arrival tolerance in degrees; saved automatically.")) with { Spacing = 16 });
+            PreferenceControl("tolerance", "Tolerance", preferences.Tolerance, .05, 1, .05, "Arrival tolerance in degrees; saved automatically.")) with { Spacing = 4 });
         widgets.Add(Widget.Row("teleoperate", Widget.Button("teleoperate.toggle", "Drag joints") with { Width = 135 },
             Widget.Row("teleoperate.joints", Enumerable.Range(1, 6).Select(i => Widget.Button("teleoperate.joint." + i, "J" + i) with { Width = 38, Enabled = false }).ToArray()) with { Spacing = 4 },
             Info("workspace.link-info", "The solid robot is the simulated leader. The translucent ghost shows measured real joint and gripper feedback.")));

@@ -90,7 +90,11 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         await Render(cancellation);
         passiveMeasuredTrackingStarted = true;
         shell.Loops.Started(Watch(shutdown.Token));
+        // Clicks are only taken once this method returns. These lines say, from the system
+        // journal alone, whether a dead panel is a startup that never finished.
+        Trace.TraceInformation("Startup: view published; starting cameras.");
         foreach (string camera in new[] { "bench", "gripper", "depth" }) await RestartCamera(camera);
+        Trace.TraceInformation("Startup complete; accepting clicks.");
     }
 
     private JsonObject Device(string? expectedDeviceId = null, long? expectedGeneration = null, string? expectedToken = null,
@@ -198,6 +202,7 @@ public sealed partial class PipersPlugin : ILuckyPlugin
 
     public async Task HandleEventAsync(UiEvent input, CancellationToken cancellation)
     {
+        Trace.TraceInformation("Click received: {0}", input.WidgetId);
         long inputEpoch = ControlInputEpoch;
         var eventProfile = ActiveProfile;
         string eventBackend = token;
@@ -295,7 +300,12 @@ public sealed partial class PipersPlugin : ILuckyPlugin
                 // Clicking the robot that is already open is how you come back from a bench page. That is
                 // navigation only: a profile switch would hold a moving arm, revoke control, release the
                 // gripper and cancel a recovery in progress.
-                if (id != "profiles.select." + ActiveProfile.Id) await ProfileEvent(rest, cancellation);
+                // That holds only while the arm server is already listening to this robot's adapter. When it
+                // is not (after a server start it may be on another robot's), this click is the one way to
+                // connect, so it must go through.
+                bool elsewhere = ActiveProfile.CanDeviceId.Length > 0 && state?["selected"]?.GetValue<string>() is { } listening &&
+                    listening != ActiveProfile.CanDeviceId;
+                if (id != "profiles.select." + ActiveProfile.Id || elsewhere) await ProfileEvent(rest, cancellation);
                 // Selecting a robot returns to its controls through the same
                 // publication gate as every other navigation.
                 await PublishWorkspaceView(cancellation, Navigation.Navigate("controls"));
@@ -620,6 +630,12 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         var backend = shell.Backend.Standing;
         patches["backend.restart.confirmation"] = new() { ["visible"] = backend.Restart == BackendRestartPhase.Confirming };
         patches["backend.status"] = new() { ["text"] = backend.Status };
+        bool serverLive = ServerLive;
+        patches["workspace.settings.diagnostics@nav"] = new() { ["text"] = ServerLabel, ["appearance"] = serverLive ? "success" : "muted" };
+        patches["backend.state.dot"] = new() { ["appearance"] = serverLive ? "success" : "muted" };
+        patches["backend.state"] = new() { ["text"] = serverLive ? "Running" : "Not running" };
+        patches["backend.start"] = new() { ["enabled"] = !serverLive, ["appearance"] = serverLive ? "default" : "primary", ["hint"] = serverLive ? "The arm server is already running." : StartHint };
+        patches["backend.restart"] = new() { ["enabled"] = serverLive, ["hint"] = serverLive ? RestartHint : "Nothing to restart: the arm server is not running." };
         patches["backend.prerequisites"] = new() { ["text"] = backend.Setup };
         patches["workspace.action-error"] = new() { ["text"] = uiActionError, ["hint"] = uiActionError, ["visible"] = uiActionError.Length > 0 };
         AddProfilePatches(patches);

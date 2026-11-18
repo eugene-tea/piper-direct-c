@@ -61,8 +61,7 @@ public sealed partial class PipersPlugin
     {
         var rows = preferences.Robots!.Select(p => Widget.Row("overview.row." + p.Id,
             Widget.Label("overview.name." + p.Id, p.Name) with { Width = 130, Height = 28 },
-            Widget.Label("overview.dot." + p.Id, "●") with { Width = 14, Height = 28, Appearance = StatusTone(ProfileStatus(p)) },
-            Widget.Label("overview.state." + p.Id, StatusText(ProfileStatus(p))) with { Width = 150, Height = 28 },
+            StatusBadge("overview.dot." + p.Id, StatusTone(ProfileStatus(p)), Widget.Label("overview.state." + p.Id, StatusText(ProfileStatus(p))) with { Width = 156, Height = 28 }) with { Width = 172 },
             Widget.Label("overview.next." + p.Id, OverviewNext(ProfileStatus(p))) with { Height = 28, Appearance = "muted" }) with { Spacing = 8 }).ToArray();
         return Widget.Column("overview",
             Widget.Column("overview.robots", [Widget.Row("overview.columns",

@@ -11,13 +11,21 @@ public sealed partial class PipersPlugin
         { Width = 210, Icon = "crosshair", Hint = "Opens this robot's guided mounting calibration. It never moves the arm." };
 
     /// <summary>A small capital heading, like the section titles of the editor's own panels.</summary>
+    /// <summary>A coloured status dot joined to its text, so the pair reads as one thing.
+    /// Patch the dot's appearance by <paramref name="dotId"/> and the text by its own id.</summary>
+    internal static Widget StatusBadge(string dotId, string tone, Widget text) => Widget.Row(dotId + "@badge",
+        Widget.Label(dotId, "●") with { Width = 10, Height = text.Height, Appearance = tone }, text) with { Spacing = 3 };
+
     private static Widget Section(string id, string title) => Widget.Label("section." + id, title) with { Appearance = "muted", Height = 22 };
 
     private Widget PreferenceControl(string id, string title, double value, double minimum, double maximum, double step, string help) =>
-        Widget.Column(id + ".control", Widget.Row(id + ".heading", Widget.Label(id + ".label", title),
-            Info("workspace.info." + id, help), Widget.Label(id + ".value", id == "speed" ? $"{value:F0}%" : $"{value:F2}°") with { Width = 74, Appearance = "numeric" }),
+        // One line per setting, like the joint rows above it: every part but the slider has a fixed
+        // width, so a narrow panel shortens the slider instead of squeezing a title to one letter a line.
+        Widget.Row(id + ".control", Widget.Label(id + ".label", title) with { Width = 74, Height = 28 },
+            Info("workspace.info." + id, help),
             Widget.Slider(id, value, minimum, maximum, step) with { Hint = help },
-            Widget.Label(id + ".limits", id == "speed" ? "Waiting for reported speed limits" : $"{minimum:0.##}° — {maximum:0.##}°") with { Height = 24, Appearance = "muted", Hint = help }) with { Spacing = 5 };
+            Widget.Label(id + ".value", id == "speed" ? $"{value:F0}%" : $"{value:F2}°") with { Width = 56, Height = 28, Appearance = "numeric" },
+            Widget.Label(id + ".limits", id == "speed" ? "Waiting for reported speed limits" : $"{minimum:0.##}° — {maximum:0.##}°") with { Width = 200, Height = 28, Appearance = "muted", Hint = help }) with { Spacing = 8 };
 
     private static Widget Field(string id, string title, Widget input) => Widget.Column(id + ".field", Widget.Label(id + ".caption", title) with { Appearance = "muted" }, input) with { Spacing = 6 };
 
