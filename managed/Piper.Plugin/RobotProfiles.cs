@@ -186,14 +186,14 @@ public sealed partial class PipersPlugin
         bool benchCamera = bench && (Navigation.Page == WorkspacePage.Camera || Navigation.Page == WorkspacePage.Settings && Navigation.Category == SettingsCategory.Cameras);
         // Every robot keeps its own Stop beside its name, on every page.
         var robots = preferences.Robots!.Select(p => (Widget)(Widget.Row("profiles.row." + p.Id,
-            Widget.NavItem("profiles.select." + p.Id, ProfileLabel(p), "robot", !bench && p.Id == ActiveProfile.Id) with
+            Widget.NavItem("profiles.select." + p.Id, ProfileLabel(p), "robot-arm", !bench && p.Id == ActiveProfile.Id) with
                 { Hint = p.CanDeviceId.Length == 0 ? "Assign an adapter in this robot's Setup tab" : "Open " + p.Name },
             Widget.Button(RobotProfileRouting.RobotStopPrefix + p.Id, "Stop") with { Height = 28, Width = 52, Appearance = "danger-quiet",
                 Hint = "Stop " + p.Name + " now. Holding torque can be lost: support the arm." },
             Widget.Label("profiles.row.pad." + p.Id, "") with { Width = 16 }) with { Spacing = 4 })).ToList();
         robots.Add(Widget.NavItem("profiles.add", "Add robot", "plus", false) with { Hint = "Add another arm to this bench",
             Enabled = preferences.Robots!.Length < RobotProfileRouting.MaximumProfiles });
-        var rows = new List<Widget> { Widget.NavGroup("profiles.heading", "Robots", "robot", !bench) };
+        var rows = new List<Widget> { Widget.NavGroup("profiles.heading", "Robots", "robot-arm", !bench) };
         rows.AddRange(robots);
         rows.AddRange([
             Widget.Separator("sidebar.bench.separator"),

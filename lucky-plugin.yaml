@@ -19,7 +19,7 @@ panels:
 workspaces:
   - id: luckyrobots.pipers.workspace
     name: Pipers
-    icon: Robot
+    icon: RobotArm
     panel: luckyrobots.pipers.controls
     panelRatio: 0.52
 # Release tooling writes verified download URLs and SHA-256 digests here.
