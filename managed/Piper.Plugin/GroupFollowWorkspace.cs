@@ -22,6 +22,11 @@ public sealed partial class PipersPlugin
         var preparation = GroupPreparation();
         string status = GroupStatusLabel(preparation);
         return Widget.Column("group.follow",
+        Widget.Label("group.follow.heading", "FOLLOW SIMULATION") with { Appearance = "muted" },
+        new Widget("checkbox", "group.follow.selected") { Text = "Include " + ActiveProfile.Name, Value = ActiveProfile.FollowSimulationSelected ? 1 : 0,
+            Enabled = !GroupFollowActive, Hint = "Include this robot in the group that follows the simulation. Ticking this does not start Play or move hardware." },
+        Widget.Label("group.follow.steps", FollowSteps(ready: false)) with { Height = 88,
+            Hint = "The order for one run. A filled dot is done; the arrow is what to do next." },
         Widget.Button("group.follow.toggle", "Follow simulation") with {
             Height = 42, Appearance = "primary", Visible = !GroupFollowActive,
             Enabled = !GroupFollowActive && preparation.RobotCount > 0,
@@ -33,10 +38,22 @@ public sealed partial class PipersPlugin
     }
 
     private string GroupStatusLabel(FollowPreparationReport preparation) => GroupFollowActive ? follow.Status.Headline
-        : follow.Outcome is { Summary.Length: > 0 } outcome ? outcome.Summary : preparation.Summary;
+        : follow.Outcome is { Summary.Length: > 0 } outcome ? "Last run: " + outcome.Summary : preparation.Summary;
 
     private int GroupStatusHeight(string status) => GroupFollowActive ? 72
         : Math.Clamp((status.Count(c => c == '\n') + 2) * 38, 72, 420);
+
+    /// <summary>The four steps of one following run, for the robot on screen. Display only:
+    /// admission is still decided by <see cref="GroupPreparation"/> and the native follower.</summary>
+    internal string FollowSteps(bool ready)
+    {
+        bool included = ActiveProfile.FollowSimulationSelected, armed = GroupFollowActive;
+        bool playing = armed && !follow.Status.Headline.StartsWith("Armed", StringComparison.Ordinal);
+        (bool Done, string Text)[] steps = [(ready || armed && included, "1 Enable robot"), (included, "2 Tick Include"),
+            (armed, "3 Follow simulation"), (playing, "4 Play in the editor")];
+        int next = Array.FindIndex(steps, step => !step.Done);
+        return string.Join("\n", steps.Select((step, index) => (step.Done ? "● " : index == next ? "→ " : "○ ") + step.Text));
+    }
 
     private async Task GroupFollowWorkspaceEvent(string action, JsonElement value, CancellationToken cancellation)
     {
@@ -57,7 +74,7 @@ public sealed partial class PipersPlugin
         await Update(cancellation);
     }
 
-    private void AddGroupFollowPatches(Dictionary<string, JsonObject> patches)
+    private void AddGroupFollowPatches(Dictionary<string, JsonObject> patches, JsonObject? device = null)
     {
         bool active = GroupFollowActive;
         var preparation = GroupPreparation();
@@ -68,7 +85,9 @@ public sealed partial class PipersPlugin
         patches["group.follow.status"] = new() { ["text"] = status, ["height"] = GroupStatusHeight(status),
             ["hint"] = active ? follow.Status.Detail : status };
         patches["group.follow.selected"] = new() { ["value"] = ActiveProfile.FollowSimulationSelected ? 1 : 0,
-            ["enabled"] = !active, ["hint"] = active ? "Stop following before changing the group." : "Include this robot when you press Follow simulation in the left sidebar." };
+            ["text"] = "Include " + ActiveProfile.Name,
+            ["enabled"] = !active, ["hint"] = active ? "Stop following before changing the group." : "Include this robot when you press Follow simulation below." };
+        patches["group.follow.steps"] = new() { ["text"] = FollowSteps(Readiness(device).NextAction == RobotPrimaryAction.None && Readiness(device).Label.StartsWith("Ready", StringComparison.Ordinal)) };
         if (!active) return;
         foreach (string id in patches.Keys.Where(id => GroupBlocksControlEvent(id) && id is not ("enable" or "teaching.help") &&
             (!id.StartsWith("joint.", StringComparison.Ordinal) || !id.EndsWith(".value", StringComparison.Ordinal) && !id.EndsWith(".current", StringComparison.Ordinal))))

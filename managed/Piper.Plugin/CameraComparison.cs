@@ -169,7 +169,7 @@ public sealed partial class PipersPlugin
                 : id == "depth" && !metricDepth && profile?["model"]?.GetValue<string>() == "realsense-distorted"
                     ? "Real color uses factory distortion · sim lens/mount alignment unverified"
                 : profile is not null ? "Profile mismatch · check camera device and resolution"
-                : id == "gripper" ? "Estimated 150° fisheye · use ⚙ to calibrate lens and mount"
+                : id == "gripper" ? "Estimated 150° fisheye · use Setup to calibrate lens and mount"
                 : "Estimated pose/lens · calibration not verified · preview clocks not synchronized" };
             patches[$"camera.{id}.simoverlay"] = new() { ["text"] = saved?.Overlay == true ? "Show simulation only" : "Real / simulation overlay", ["enabled"] = !metricDepth };
         }

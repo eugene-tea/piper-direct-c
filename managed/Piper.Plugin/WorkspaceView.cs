@@ -6,8 +6,8 @@ namespace LuckyRobots.Piper.Plugin;
 public sealed partial class PipersPlugin
 {
     private static Widget Info(string id, string hint) => Widget.Button(id, "(i)") with { Width = 28, Appearance = "quiet", Hint = hint };
-    private Widget Nav(WorkspacePage page, string id, string text) => Widget.Button("workspace." + id, text) with {
-        Appearance = Navigation.Page == page || page == WorkspacePage.Recording && Navigation.Page == WorkspacePage.Replay ? "selected" : "quiet", Width = 118 };
+    /// <summary>A small capital heading, like the section titles of the editor's own panels.</summary>
+    private static Widget Section(string id, string title) => Widget.Label("section." + id, title) with { Appearance = "muted", Height = 22 };
 
     private Widget PreferenceControl(string id, string title, double value, double minimum, double maximum, double step, string help) =>
         Widget.Column(id + ".control", Widget.Row(id + ".heading", Widget.Label(id + ".label", title),
@@ -32,7 +32,7 @@ public sealed partial class PipersPlugin
     {
         string fullStatus = calibrationOpen ? "Calibration reads the measured pose. Use the physical teach button only when the guide asks."
             : device?["range_recovery"]?["required"]?.GetValue<bool>() == true ? device["range_recovery"]!["reason"]?.GetValue<string>() ?? message : message;
-        patches["status"] = new() { ["text"] = device is null ? "Waiting for fresh controller feedback" : device["recovery_required"]?.GetValue<bool>() == true ? "Stopped · review recovery above" : fullStatus.Length > 110 ? fullStatus[..107] + "…" : fullStatus, ["hint"] = fullStatus };
+        patches["status"] = new() { ["text"] = device is null ? "Waiting for fresh controller feedback" : device["recovery_required"]?.GetValue<bool>() == true ? Navigation.Page == WorkspacePage.Controls ? "Stopped · follow the recovery steps above" : "Stopped · open Controls to recover" : fullStatus.Length > 110 ? fullStatus[..107] + "…" : fullStatus, ["hint"] = fullStatus };
         var power = RobotPowerState.Inspect(device);
         var teachingMode = TeachingState.Inspect(device);
         patches["workspace.power"] = new() { ["text"] = power.Label, ["hint"] = power.AllEnabled

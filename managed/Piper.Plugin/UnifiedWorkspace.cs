@@ -55,7 +55,7 @@ public sealed record RobotReadiness(string Label, string Action, bool Enabled, s
             return Step("Controller needs attention", "Controls unavailable", blocker);
         }
         if (needsConnection) return Step(power.AllEnabled ? "Enabled · finish connection" : "Disabled", "Enable robot", "One action connects the assigned arm and gripper and restores holding control.", RobotPrimaryAction.Enable);
-        return Step("Ready · arm and gripper enabled", "Enabled", "Select this robot's Follow simulation checkbox, then use Follow simulation in the left sidebar.");
+        return Step("Ready · arm and gripper enabled", "Enabled", "Tick Include in the left sidebar, then press Follow simulation.");
     }
 }
 
@@ -161,7 +161,7 @@ public sealed partial class PipersPlugin
             await StartMeasuredLink(automatic: false, cancellation);
         }
         RememberControlApproval(expectedPermission);
-        message = "Ready · arm and gripper enabled. Select follower robots, then use Follow simulation in the left sidebar.";
+        message = "Ready · arm and gripper enabled. Tick Include in the left sidebar, then press Follow simulation.";
     }
 
     private async Task PrimaryActionProgress(string stage, string text, CancellationToken cancellation)
@@ -216,8 +216,23 @@ public sealed partial class PipersPlugin
         bool canReleasePower = controllerStopped || !TeachingState.Inspect(device).Active;
         bool groupParticipant = GroupFollowIncludes(ActiveProfile.Id);
         patches["workspace.connection"] = new() {
-            ["text"] = groupParticipant ? follow.Status.Headline : ResumeControlsBusy ? "Reconnecting controls" : readiness.Label,
+            ["text"] = "● " + (groupParticipant ? follow.Status.Headline : ResumeControlsBusy ? "Reconnecting controls" : readiness.Label),
             ["hint"] = groupParticipant ? follow.Status.Detail : readiness.Detail };
+        // One line that always answers "what do I do now?". The full reasoning stays in its tooltip.
+        bool recovering = RecoveryPanelVisible(device);
+        string detail = groupParticipant ? follow.Status.Detail : readiness.Detail;
+        string next = groupParticipant ? detail
+            : recovering ? controls ? "Follow the recovery steps below." : "Open Controls and follow the recovery steps."
+            : !controls && readiness.NextAction != RobotPrimaryAction.None ? "Open Controls, then press " + readiness.Action + "."
+            : detail;
+        // The editor moves a tab as soon as it is clicked. Only a refused navigation needs the tab put
+        // back; resending the selection with every update could overwrite a click that is still on its way.
+        if (uiActionError.Length > 0)
+        {
+            patches["workspace.pages"] = new() { ["value"] = WorkspaceTabs.PageIndex(Navigation) };
+            patches["workspace.categories"] = new() { ["value"] = (int)Navigation.Category };
+        }
+        patches["workspace.next"] = new() { ["text"] = "Next: " + next, ["visible"] = next.Length > 0, ["hint"] = detail };
         patches["enable"] = new() { ["text"] = ResumeControlsBusy ? "Resuming controls…" : readiness.Action, ["visible"] = controls,
             ["enabled"] = controls && readiness.Enabled && !PrimaryActionBusy && PrimaryActionAvailable,
             ["hint"] = readiness.Detail };
@@ -258,6 +273,8 @@ public sealed partial class PipersPlugin
             pikaDevices = reply["devices"]?.AsArray().OfType<JsonObject>().Select(d => (JsonObject)d.DeepClone()).ToArray() ?? [];
             pikaInventoryMessage = pikaDevices.Length == 0 ? "No Pika detected. Connect its USB cable; discovery retries automatically." : $"{pikaDevices.Length} grippers detected · assignments are saved automatically";
         }
+        catch (global::Grpc.Core.RpcException error) when (error.StatusCode == global::Grpc.Core.StatusCode.Unavailable)
+        { pikaInventoryMessage = "The arm server is not running, so grippers cannot be listed. Start it in Settings → Diagnostics."; }
         catch (Exception error) when (error is not OperationCanceledException)
         { pikaInventoryMessage = "Gripper discovery: " + error.Message; }
         pikaInventoryAt = Stopwatch.GetTimestamp();
@@ -268,7 +285,7 @@ public sealed partial class PipersPlugin
         var robots = SceneRobotBindings.Options(scene?["robots"]?.AsArray().OfType<JsonObject>() ?? []);
         settingsRobotOptions = robots;
         settingsRobotChoices = preferences.Robots!.ToDictionary(p => p.Id, p => SceneRobotBindings.AvailableFor(settingsRobotOptions, preferences.Robots!, p), StringComparer.Ordinal);
-        var rows = new List<Widget> { Widget.Label("global.robot.assignment.help", "Connect each real robot to one simulated arm. Each arm can be assigned once.") with { Appearance = "muted", Height = 70 } };
+        var rows = new List<Widget> { Widget.Label("global.robot.assignment.help", "Connect each real robot to one simulated arm. Each arm can be assigned once.") with { Appearance = "muted", Height = 28 } };
         foreach (var profile in preferences.Robots!)
         {
             string id = "global.robot." + profile.Id;
@@ -302,8 +319,11 @@ public sealed partial class PipersPlugin
                         Hint = "One-time Windows USB sharing for the selected Pika; no motor commands." },
                     Widget.Button(id + ".remove", "Remove robot") with { Enabled = preferences.Robots.Length > 1, Appearance = "quiet" }) with { Spacing = 4 }) with { Spacing = 8, Padding = 10, Appearance = "panel" });
         }
-        rows.Add(Widget.Column("global.robot.actions", Widget.Button("profiles.add", "+ Add robot") with { Enabled = preferences.Robots!.Length < RobotProfileRouting.MaximumProfiles },
-            Widget.Button("global.refresh", "Refresh devices"), Widget.Label("profiles.inventory", pikaInventoryMessage) with { Appearance = "muted", Height = 72 }) with { Spacing = 6 });
+        rows.Add(Widget.Column("global.robot.actions",
+            Widget.Row("global.robot.buttons", Widget.Button("profiles.add", "+ Add robot") with { Width = 130, Enabled = preferences.Robots!.Length < RobotProfileRouting.MaximumProfiles },
+                Widget.Button("global.refresh", "Refresh devices") with { Width = 150 },
+                Widget.Label("global.robot.buttons.fill", "")) with { Spacing = 8 },
+            Widget.Label("profiles.inventory", pikaInventoryMessage) with { Appearance = "muted", Height = 44 }) with { Spacing = 6 });
         return Widget.Column("global.robots", rows.ToArray()) with { Spacing = 12 };
     }
 

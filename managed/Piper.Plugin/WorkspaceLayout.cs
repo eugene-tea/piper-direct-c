@@ -15,25 +15,25 @@ public sealed partial class PipersPlugin
             WorkspacePage.Recording => RecordingPage(), WorkspacePage.Replay => ReplayPage(), WorkspacePage.Camera => CameraDetailPage(), _ => ControlsPage() };
         var content = Widget.Column("controls",
             Widget.Column("header", Widget.Row("header.title", Widget.Label("workspace.robot-name", ActiveProfile.Name) with { Appearance = "heading", Height = 30 },
-                Widget.Label("workspace.connection", "Connecting…") with { Height = 30 }),
+                Widget.Label("workspace.connection", "● Connecting…") with { Height = 30 }),
+                Widget.Label("workspace.next", "") with { Visible = false, Hint = "The one thing to do next for this robot." },
                 Widget.Row("header.actions", Widget.Button("enable", "Enable robot") with { Appearance = "primary" },
                     Widget.Button("disable", "Disable") with { Width = 68, Appearance = "quiet", Hint = "Support the arm before releasing holding torque." },
-                    Widget.Button("stop", "STOP") with { Appearance = "danger", Width = 72 })),
+                    Widget.Button("stop", "STOP") with { Appearance = "danger", Width = 72, Hint = "Controller stop. Holding torque can be lost: support the arm." })),
             Widget.Label("workspace.primary-action", "") with { Height = 48, Visible = false },
             Widget.Label("workspace.action-error", "") with { Height = 64, Visible = false, Appearance = "danger" },
-            Widget.Row("workspace.tabs", Nav(WorkspacePage.Controls, "controls", "Controls"), Nav(WorkspacePage.Recording, "recording", "Recording")) with { Spacing = 10 },
-                new Widget("checkbox", "global.ghosts") { Text = "Show real robot ghosts", Value = preferences.ShowMeasuredGhosts ? 1 : 0,
-                    Hint = "Measured hardware pose, visible in Edit and Play. Ghosts are excluded from camera recordings." },
+            new Widget("tabs", "workspace.pages") { Options = WorkspaceTabs.Pages, Value = WorkspaceTabs.PageIndex(Navigation) },
             Widget.Row("safety", Widget.Label("safety.text", "Make sure it is safe to move the robot."),
                 Widget.Button("safety.accept", "Enable robot") with { Appearance = "primary" }, Widget.Button("safety.cancel", "Cancel")) with { Visible = showClearanceConfirmation, Padding = 12, Appearance = "panel" },
             ResetCompletionConfirmation(),
-            Widget.Column("workspace.incident", Widget.Label("incident", "") with { Height = 56 },
-                Widget.Label("recovery.next", "") with { Height = 88 },
-                Widget.Label("recovery.requirements", "") with { Height = 96 },
-                Widget.Label("recovery.feedback", "") with { Height = 56, Visible = false },
+            Widget.Column("workspace.incident", Widget.Label("incident.heading", "RECOVERY") with { Appearance = "muted" },
+                Widget.Label("incident", ""),
+                Widget.Label("recovery.next", ""),
+                Widget.Label("recovery.requirements", "") with { Appearance = "muted" },
+                Widget.Label("recovery.feedback", "") with { Visible = false },
                 Widget.Button("recovery.card.run", "Open recovery") with { Enabled = false, Hint = "The current recovery step and unmet conditions appear above." },
                 Widget.Button("recovery.home", "Arm resting, path clear — recover to zero") with { Enabled = false },
-                Widget.Button("recovery.guide.cancel", "Cancel recovery guide") with { Visible = false, Appearance = "quiet" }) with { Visible = false, Padding = 12, Appearance = "panel" },
+                Widget.Button("recovery.guide.cancel", "Cancel recovery guide") with { Visible = false, Appearance = "quiet" }) with { Visible = false, Padding = 12, Spacing = 8, Appearance = "panel" },
             body, Widget.Label("status", "Connecting…") with { Height = 28, Appearance = "muted" }) with { Padding = 18, Spacing = 12 };
         return Widget.Row("workspace", RobotSidebar(), content) with { Spacing = 0 };
     }
@@ -41,11 +41,9 @@ public sealed partial class PipersPlugin
     internal Widget ControlsPage()
     {
         var widgets = new List<Widget> {
-            new Widget("checkbox", "group.follow.selected") { Text = "Follow simulation with this robot", Value = ActiveProfile.FollowSimulationSelected ? 1 : 0,
-                Enabled = !GroupFollowActive, Hint = "Select this robot, then use Follow simulation in the left sidebar. Checking this does not start Play or move hardware." },
             Widget.Column("teaching", Widget.Label("teaching.label", recovery.ObservedTeaching.Label) with { Height = 28 },
                 Widget.Label("teaching.next", recovery.ObservedTeaching.NextStep) with { Height = 48 }, PikaTeachingControls()) with { Visible = recovery.ObservedTeaching.BlocksTargets || PikaTeachingControlsVisible },
-            Widget.Row("cameras", Camera("gripper", "Gripper fisheye"), Camera("depth", "Depth")) with { Spacing = 14 },
+            Section("joints", "GRIPPER & JOINTS"),
             Widget.Row("pika", Widget.Label("pika.name", "Pika") with { Width = 28 },
                 Widget.Label("pika.value", "— mm") with { Width = 64, Appearance = "numeric", Hint = "Measured jaw opening. Enabled together with this robot." },
                 Widget.Button("pika.minus", "−") with { Width = 28 }, Widget.Slider("pika.target", PikaProtocol.MinimumOpeningMm, PikaProtocol.MinimumOpeningMm, PikaProtocol.MaximumOpeningMm, .1) with { Enabled = false, Hint = $"Absolute opening, {PikaProtocol.MinimumOpeningMm}–{PikaProtocol.MaximumOpeningMm} mm" },
@@ -70,6 +68,10 @@ public sealed partial class PipersPlugin
         widgets.Add(Widget.Row("teleoperate", Widget.Button("teleoperate.toggle", "Drag joints") with { Width = 135 },
             Widget.Row("teleoperate.joints", Enumerable.Range(1, 6).Select(i => Widget.Button("teleoperate.joint." + i, "J" + i) with { Width = 38, Enabled = false }).ToArray()) with { Spacing = 4 },
             Info("workspace.link-info", "The solid robot is the simulated leader. The translucent ghost shows measured real joint and gripper feedback.")));
+        widgets.Add(new Widget("checkbox", "global.ghosts") { Text = "Show real robot ghosts", Value = preferences.ShowMeasuredGhosts ? 1 : 0,
+            Hint = "Measured hardware pose, visible in Edit and Play. Ghosts are excluded from camera recordings." });
+        widgets.Add(Section("cameras", "WRIST CAMERAS"));
+        widgets.Add(Widget.Row("cameras", Camera("gripper", "Gripper fisheye"), Camera("depth", "Depth")) with { Spacing = 14 });
         return Widget.Column("workspace.controls.body", widgets.ToArray()) with { Spacing = 10 };
     }
 
@@ -87,11 +89,8 @@ public sealed partial class PipersPlugin
                     Widget.Label("profiles.can.status", "") with { Height = 42 }, PikaReferenceControls()) with { Visible = workspace.ConnectionDetailsOpen }),
             _ => GlobalRobotsSettings()
         };
-        Widget Category(SettingsCategory category, string id, string text) => Widget.Button("workspace.settings." + id, text) with { Appearance = Navigation.Category == category ? "selected" : "quiet" };
-        return Widget.Column("workspace.settings.body", Widget.Row("global.settings.heading", Widget.Label("workspace.settings.title", "Bench settings") with { Appearance = "heading" },
-            Widget.Button("workspace.controls@settings", "Back to controls")),
-            Widget.Row("workspace.settings.categories", Category(SettingsCategory.Robot, "robot", "Robots & devices"), Category(SettingsCategory.Cameras, "cameras", "Cameras")) with { Spacing = 8 },
-            Widget.Row("workspace.settings.categories.more", Category(SettingsCategory.Bench, "bench", "Bench & calibration"), Category(SettingsCategory.Diagnostics, "diagnostics", "Diagnostics")) with { Spacing = 8 },
+        return Widget.Column("workspace.settings.body",
+            new Widget("tabs", "workspace.categories") { Options = WorkspaceTabs.Categories, Value = (int)Navigation.Category },
             section with { Spacing = 12 }) with { Spacing = 16 };
     }
 }

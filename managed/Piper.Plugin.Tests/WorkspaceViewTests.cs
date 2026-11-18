@@ -257,12 +257,12 @@ internal static class WorkspaceViewTests
             {
                 await CheckView("settings", "cameras");
                 long before = plugin.workspace.Epoch;
-                string back = WidgetId("workspace.controls@settings");
-                await Click(WidgetId("workspace.settings.bench"));
+                string back = WidgetId("workspace.pages");
+                await Click(WidgetId("workspace.categories"), 2);
                 Check(plugin.workspace.Navigation.Category == SettingsCategory.Cameras && plugin.workspace.Epoch == before &&
                     plugin.uiActionError.Contains("Stop following", StringComparison.Ordinal),
                     "Rejected Bench navigation mutated the published camera page");
-                await Click(back);
+                await Click(back, 0);
                 Check(plugin.workspace.Navigation.Page == WorkspacePage.Controls && plugin.workspace.Epoch > before,
                     "The old page became unclickable after rejected Bench navigation");
             }

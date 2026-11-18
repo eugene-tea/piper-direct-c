@@ -13,11 +13,11 @@ public sealed partial class PipersPlugin
             heading.Add(Widget.Button("camera.depth.selectdepth", "Depth") with { Width = 52, Appearance = D405View.Mode(CameraSettings(id)) == "depth" ? "selected" : "quiet" });
         }
         heading.Add(Widget.Button("workspace.camera." + id, "↗") with { Width = 32, Appearance = "quiet", Hint = "Enlarge real and simulation camera views" });
-        heading.Add(Widget.Button("workspace.settings.cameras." + id, "⚙") with { Width = 32, Appearance = "quiet", Hint = "Camera settings" });
+        heading.Add(Widget.Button("workspace.settings.cameras." + id, "Setup") with { Width = 52, Appearance = "quiet", Hint = "Camera settings" });
         return Widget.Column("camera." + id, Widget.Row("camera." + id + ".header", heading.ToArray()) with { Spacing = 4 },
             Widget.Label("camera." + id + ".real.title", "REAL") with { Height = 20, Appearance = "muted" },
             new Widget("image", "camera." + id + ".image") { ImageId = CameraImageId(id), Visible = CameraFrameReady(id), Height = id == "bench" ? 130 : 230 },
-            Widget.Label("camera." + id + ".empty", CameraSettings(id).Enabled ? "Connecting camera…" : "Camera paused · use ⚙ to start") with { Height = id == "bench" ? 80 : 120, Visible = !CameraFrameReady(id), Appearance = "muted" },
+            Widget.Label("camera." + id + ".empty", CameraSettings(id).Enabled ? "Connecting camera…" : "Camera paused · use Setup to start") with { Height = id == "bench" ? 44 : 56, Visible = !CameraFrameReady(id), Appearance = "muted" },
             Widget.Label("camera." + id + ".sim.title", "SIM") with { Height = 20, Appearance = "muted", Hint = "Same scene-camera identity in Edit and Play. Camera mount and exposure synchronization still need verification." },
             new Widget("scene-camera", "camera." + id + ".sim") { Height = id == "bench" ? 130 : 180,
                 Visible = SimulationCameraRouting.IsAvailable(preferences.SimulationCameras?.GetValueOrDefault(id), simulationCameras) },
@@ -27,7 +27,7 @@ public sealed partial class PipersPlugin
     private Widget CameraDetailPage() => Widget.Column("workspace.camera.body",
         Widget.Row("workspace.camera.heading", Widget.Button("workspace.camera-back", "‹ Back") with { Width = 100 },
             Widget.Label("workspace.camera.title", cameraDetail switch { "bench" => "Bench camera · shared", "depth" => "D405", _ => "Pika fisheye" }) with { Appearance = "heading" },
-            Widget.Button("workspace.settings.cameras." + cameraDetail, "⚙ Camera settings") with { Width = 165 }),
+            Widget.Button("workspace.settings.cameras." + cameraDetail, "Camera settings") with { Width = 150 }),
         Widget.Row("camera." + cameraDetail + ".comparison",
             Widget.Column("camera." + cameraDetail + ".real", Widget.Label("camera." + cameraDetail + ".real.title", "REAL · " + (D405View.MetricDepth(cameraDetail, CameraSettings(cameraDetail)) ? "distance, 7–50 cm" : "color image")) with { Appearance = "muted" },
                 new Widget("image", "camera." + cameraDetail + ".image") { ImageId = CameraImageId(cameraDetail), Height = 420, Visible = CameraFrameReady(cameraDetail) },

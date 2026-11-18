@@ -280,7 +280,7 @@ public sealed partial class PipersPlugin : ILuckyPlugin
                 "toggle" or "match" => "toggle", "stop" => "cancel",
                 _ => throw new InvalidOperationException("Unknown simulation follow action.") }, cancellation);
             else if (TryStrip(id, "global.", out rest)) await GlobalSettingsEvent(rest, input.Value, cancellation);
-            else if (TryStrip(id, "workspace.", out rest)) await WorkspaceEvent(rest, cancellation);
+            else if (TryStrip(id, "workspace.", out rest)) await WorkspaceEvent(WorkspaceTabs.Action(rest, input.Value), cancellation);
             else if (TryStrip(id, "height.", out rest)) { if (rest != "info") await HeightCheckEvent(rest, input.Value, cancellation); }
             else if (TryStrip(id, "replay.", out rest)) await ReplayEvent(rest, input.Value, cancellation);
             else if (TryStrip(id, "wizard.", out rest))
@@ -680,7 +680,7 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         AddPikaReferencePatches(patches, pika as JsonObject);
         AddUnifiedWorkspacePatches(patches, device);
         AddRecoveryHomePatches(patches);
-        AddGroupFollowPatches(patches);
+        AddGroupFollowPatches(patches, device);
         return PublishWorkspacePatch(scope, patches, cancellation, evidence);
     }
 

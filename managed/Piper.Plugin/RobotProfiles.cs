@@ -176,12 +176,13 @@ public sealed partial class PipersPlugin
     {
         var rows = preferences.Robots!.Select(p => Widget.Button("profiles.select." + p.Id, ProfileLabel(p)) with
         { Height = 56, Padding = 12, Appearance = p.Id == ActiveProfile.Id ? "selected" : "quiet", Hint = p.CanDeviceId.Length == 0 ? "Assign an adapter in Settings → Robot" : "Switch to " + p.Name }).ToArray();
-        return Widget.Column("sidebar", Widget.Button("workspace.settings.robot@sidebar", "⚙  Settings") with { Appearance = "quiet", Height = 38, Hint = "All robots, cameras, controllers and bench calibration" },
+        return Widget.Column("sidebar",
             Widget.Label("profiles.heading", "ROBOTS") with { Appearance = "muted" },
             Widget.Column("profiles.list", rows) with { Spacing = 8 },
             GroupFollowControls(),
-            (Navigation.Page == WorkspacePage.Camera && cameraDetail == "bench" ? Widget.Label("workspace.bench.enlarged", "Bench camera is enlarged") with { Height = 60, Appearance = "muted" } : Camera("bench", "Bench camera")),
-            Widget.Button("workspace.camera.bench@compare", "Enlarge & compare") with { Appearance = "quiet", Hint = "The bench camera is shared by every robot." }) with { Width = 170, Padding = 12, Spacing = 14, Appearance = "sidebar" };
+            Widget.Label("sidebar.bench.heading", "BENCH CAMERA") with { Appearance = "muted" },
+            (Navigation.Page == WorkspacePage.Camera && cameraDetail == "bench" ? Widget.Label("workspace.bench.enlarged", "Bench camera is enlarged") with { Height = 60, Appearance = "muted" } : Camera("bench", "Shared")),
+            Widget.Button("workspace.camera.bench@compare", "Enlarge & compare") with { Appearance = "quiet", Hint = "The bench camera is shared by every robot." }) with { Width = 196, Padding = 12, Spacing = 14, Appearance = "sidebar" };
     }
 
     private string ProfileLabel(RobotProfile profile)
@@ -249,7 +250,7 @@ public sealed partial class PipersPlugin
     {
         foreach (var profile in preferences.Robots!)
         {
-            patches["profiles.select." + profile.Id] = new() { ["text"] = ProfileLabel(profile) };
+            patches["profiles.select." + profile.Id] = new() { ["text"] = ProfileLabel(profile), ["enabled"] = true };
             var assignment = SceneArmAssignment(profile, settingsRobotOptions);
             patches[assignment.Id] = new() { ["text"] = assignment.Text };
         }
