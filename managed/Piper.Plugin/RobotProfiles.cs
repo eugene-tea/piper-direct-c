@@ -186,31 +186,32 @@ public sealed partial class PipersPlugin
         bool benchCamera = bench && (Navigation.Page == WorkspacePage.Camera || Navigation.Page == WorkspacePage.Settings && Navigation.Category == SettingsCategory.Cameras);
         // Every robot keeps its own Stop beside its name, on every page.
         var robots = preferences.Robots!.Select(p => (Widget)(Widget.Row("profiles.row." + p.Id,
+            // No tooltip on a plain row: it would cover the robot below it.
             Widget.NavItem("profiles.select." + p.Id, ProfileLabel(p), "robot-arm", !bench && p.Id == ActiveProfile.Id) with
-                { Hint = p.CanDeviceId.Length == 0 ? "Assign an adapter in this robot's Setup tab" : "Open " + p.Name },
+                { Appearance = StatusTone(ProfileStatus(p)), Hint = p.CanDeviceId.Length == 0 ? "Assign an adapter in this robot's Setup tab" : null },
             Widget.Button(RobotProfileRouting.RobotStopPrefix + p.Id, "Stop") with { Height = 28, Width = 52, Appearance = "danger-quiet",
                 Enabled = StopAvailable(p), Hint = StopHint(p) },
-            Widget.Label("profiles.row.pad." + p.Id, "") with { Width = 16 }) with { Spacing = 4 })).ToList();
-        robots.Add(Widget.NavItem("profiles.add", "Add robot", "plus", false) with { Hint = "Add another arm to this bench",
+            Widget.Label("profiles.row.pad." + p.Id, "") with { Width = 6 }) with { Spacing = 4 })).ToList();
+        robots.Add(Widget.NavItem("profiles.add", "Add robot", "plus", false) with {
             Enabled = preferences.Robots!.Length < RobotProfileRouting.MaximumProfiles });
         var rows = new List<Widget> { Widget.NavGroup("profiles.heading", "Robots", "robot-arm", !bench) };
         rows.AddRange(robots);
         rows.AddRange([
             Widget.Separator("sidebar.bench.separator"),
             Widget.NavGroup("sidebar.bench.heading", "Bench", "scene", bench && !serverPage),
-            Widget.NavItem("workspace.overview", "Overview", "eye", Navigation.Page == WorkspacePage.Overview) with { Hint = "Every arm at a glance" },
-            Widget.NavItem("workspace.follow", "Follow simulation", "play", Navigation.Page == WorkspacePage.Follow) with { Hint = "Choose the arms that follow the simulation and start a run" },
+            Widget.NavItem("workspace.overview", "Overview", "eye", Navigation.Page == WorkspacePage.Overview),
+            Widget.NavItem("workspace.follow", "Follow simulation", "play", Navigation.Page == WorkspacePage.Follow),
             // Always one click away, on every page, while a group is armed or running.
             Widget.Row("group.follow.cancel.row", Widget.Label("group.follow.cancel.pad", "") with { Width = 28 },
                 Widget.Button("group.follow.cancel", "Stop following") with { Height = 30, Width = 150, Visible = GroupFollowActive,
                     Hint = "Stop sending targets, request a hold for the arms and grippers used, and pause the simulation." }),
-            Widget.NavItem("workspace.camera.bench@nav", "Bench camera", "camera", benchCamera) with { Hint = "The camera beside the desk, shared by every robot" },
+            Widget.NavItem("workspace.camera.bench@nav", "Bench camera", "camera", benchCamera),
             Widget.Separator("sidebar.settings.separator"),
             Widget.NavGroup("sidebar.settings.heading", "Settings", "gear", serverPage),
-            Widget.NavItem("workspace.settings.diagnostics@nav", "Arm server", "server", serverPage) with { Hint = "Start, restart and inspect the server that runs every arm and gripper" }]);
+            Widget.NavItem("workspace.settings.diagnostics@nav", "Arm server", "server", serverPage)]);
         // The Settings sidebar's own width and row gap; rows reach both edges so the lit row spans it.
         // The lighter panel grey of the editor's Settings sidebar, not a black strip.
-        return Widget.Column("sidebar", rows.ToArray()) with { Width = 220, Padding = 4, Spacing = 2, Appearance = "panel" };
+        return Widget.Column("sidebar", rows.ToArray()) with { Width = 244, Padding = 4, Spacing = 2, Appearance = "panel" };
     }
 
     /// <summary>A robot with no adapter, or one the arm server reports as absent, has nothing to stop.
@@ -220,7 +221,11 @@ public sealed partial class PipersPlugin
         ? "Stop " + profile.Name + " now. Holding torque can be lost: support the arm."
         : profile.Name + " is not connected, so there is nothing to stop.";
 
-    private string ProfileLabel(RobotProfile profile) => profile.Name + "\n" + ProfileStatus(profile);
+    private string ProfileLabel(RobotProfile profile) => profile.Name + "\n" + StatusText(ProfileStatus(profile));
+
+    /// <summary>What the operator reads for a robot's state, and the colour it is read in.</summary>
+    internal static string StatusText(string status) => status switch { "connected" => "Connected", "offline" => "Offline", "unassigned" => "Not set up", _ => status };
+    internal static string StatusTone(string status) => status switch { "connected" or "In follower group" => "success", "Needs recovery" => "danger", _ => "muted" };
 
     private string ProfileStatus(RobotProfile profile)
     {
@@ -286,10 +291,12 @@ public sealed partial class PipersPlugin
     {
         foreach (var profile in preferences.Robots!)
         {
-            patches["profiles.select." + profile.Id] = new() { ["text"] = ProfileLabel(profile), ["enabled"] = true };
+            string status = ProfileStatus(profile);
+            patches["profiles.select." + profile.Id] = new() { ["text"] = ProfileLabel(profile), ["enabled"] = true, ["appearance"] = StatusTone(status) };
             patches[RobotProfileRouting.RobotStopPrefix + profile.Id] = new() { ["enabled"] = StopAvailable(profile), ["hint"] = StopHint(profile) };
-            patches["overview.state." + profile.Id] = new() { ["text"] = "● " + ProfileStatus(profile) };
-            patches["overview.next." + profile.Id] = new() { ["text"] = OverviewNext(ProfileStatus(profile)) };
+            patches["overview.dot." + profile.Id] = new() { ["appearance"] = StatusTone(status) };
+            patches["overview.state." + profile.Id] = new() { ["text"] = StatusText(status) };
+            patches["overview.next." + profile.Id] = new() { ["text"] = OverviewNext(status) };
             var assignment = SceneArmAssignment(profile, settingsRobotOptions);
             patches[assignment.Id] = new() { ["text"] = assignment.Text };
         }

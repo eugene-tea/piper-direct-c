@@ -82,7 +82,7 @@ internal static class WorkspaceStructureTests
 
         var page = All(plugin.FollowPage()).ToArray();
         Check(page.Single(w => w.Id == "group.follow.include.one").Value == 0 && page.Single(w => w.Id == "group.follow.include.two").Value == 1 &&
-            page.Single(w => w.Id == "group.follow.ready.one").Text == "○ not included" &&
+            page.Single(w => w.Id == "group.follow.ready.one") is { Text: "Not included", Appearance: "muted" } &&
             page.Count(w => w.Id == "group.follow.toggle") == 1 && page.All(w => w.Id != "group.follow.cancel"),
             "The Follow simulation page did not list every robot with its own Include tick");
 

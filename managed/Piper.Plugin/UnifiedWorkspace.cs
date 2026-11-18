@@ -216,8 +216,14 @@ public sealed partial class PipersPlugin
         bool canReleasePower = controllerStopped || !TeachingState.Inspect(device).Active;
         bool groupParticipant = GroupFollowIncludes(ActiveProfile.Id);
         patches["workspace.connection"] = new() {
-            ["text"] = "● " + (groupParticipant ? follow.Status.Headline : ResumeControlsBusy ? "Reconnecting controls" : readiness.Label),
+            ["text"] = groupParticipant ? follow.Status.Headline : ResumeControlsBusy ? "Reconnecting controls" : readiness.Label,
             ["hint"] = groupParticipant ? follow.Status.Detail : readiness.Detail };
+        // Green when there is nothing to do, red when it is stopped, amber when it waits for the operator.
+        string tone = groupParticipant || readiness.Label.StartsWith("Ready", StringComparison.Ordinal) ? "success"
+            : readiness.NextAction is RobotPrimaryAction.OpenRecovery or RobotPrimaryAction.OpenStoppedRecovery || readiness.Label == "Controller needs attention" ? "danger"
+            : readiness.NextAction != RobotPrimaryAction.None ? "warning" : "muted";
+        patches["workspace.connection.dot"] = new() { ["appearance"] = tone };
+        patches["stop"] = new() { ["enabled"] = StopAvailable(ActiveProfile), ["hint"] = StopHint(ActiveProfile) };
         // One line that always answers "what do I do now?". The full reasoning stays in its tooltip.
         bool recovering = RecoveryPanelVisible(device);
         string detail = groupParticipant ? follow.Status.Detail : readiness.Detail;
@@ -310,8 +316,7 @@ public sealed partial class PipersPlugin
                 Widget.Column(id + ".actions",
                     Widget.Button(id + ".setup", "Set up USB gripper") with { Width = 160,
                         Visible = OperatingSystem.IsWindows() && devices.Any(d => d["device"]?.GetValue<string>() == profile.PikaDevice && d["available"]?.GetValue<bool>() != true),
-                        Hint = "One-time Windows USB sharing for the selected Pika; no motor commands." },
-                    Widget.Button(id + ".remove", "Remove robot") with { Enabled = preferences.Robots!.Length > 1 }) with { Spacing = 4 }) with { Spacing = 8, Padding = 10, Appearance = "panel" });
+                        Hint = "One-time Windows USB sharing for the selected Pika; no motor commands." }) with { Spacing = 4 }) with { Spacing = 8, Padding = 10, Appearance = "panel" });
         }
         rows.Add(Widget.Column("global.robot.actions",
             Widget.Row("global.robot.buttons",

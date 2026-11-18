@@ -6,6 +6,10 @@ namespace LuckyRobots.Piper.Plugin;
 public sealed partial class PipersPlugin
 {
     private static Widget Info(string id, string hint) => Widget.Button(id, "") with { Width = 30, Icon = "info", Appearance = "quiet", Hint = hint };
+    /// <summary>The one way into a robot's mounting calibration, identical wherever it appears.</summary>
+    private static Widget CalibrationLink(string from) => Widget.Button("workspace.calibration@" + from, "Mounting calibration") with
+        { Width = 210, Icon = "crosshair", Hint = "Opens this robot's guided mounting calibration. It never moves the arm." };
+
     /// <summary>A small capital heading, like the section titles of the editor's own panels.</summary>
     private static Widget Section(string id, string title) => Widget.Label("section." + id, title) with { Appearance = "muted", Height = 22 };
 
@@ -21,7 +25,7 @@ public sealed partial class PipersPlugin
         Widget.Label("workspace.recording.title", "Before the first recording") with { Appearance = "heading" },
         Widget.Label("workspace.recording.subtitle", "Verify the measurements and streams that will be used in the dataset.") with { Appearance = "muted" },
         Widget.Label("workspace.recording.joints", "Joint & gripper feedback · waiting for live readings") with { Height = 34 },
-        Widget.Row("workspace.recording.base", Widget.Label("workspace.recording.base.status", "Tool & base · physical calibration required") with { Height = 36 }, Widget.Button("workspace.calibration@recording", "Calibrate robot") with { Width = 170, Icon = "gear", Hint = "Opens Settings → Calibration" }),
+        Widget.Row("workspace.recording.base", Widget.Label("workspace.recording.base.status", "Tool & base · physical calibration required") with { Height = 36 }, CalibrationLink("recording")),
         Widget.Row("workspace.recording.cameras", Widget.Label("workspace.recording.cameras.status", "Camera lenses & mounts · not verified") with { Height = 36 }, Info("workspace.recording.camera-info", "A base alignment does not establish the camera-to-tool/world transforms or image correspondence.")),
         Widget.Row("workspace.recording.timing", Widget.Label("workspace.recording.timing.status", "Camera-to-joint timing · not measured") with { Height = 36 }, Info("workspace.recording.time-info", "Preview pipe age excludes exposure delay. Keep exposure/receipt clocks, delay and dropped-sample evidence in each recording.")),
         Widget.Button("workspace.recording.unavailable", "Recording setup pending") with { Enabled = false },

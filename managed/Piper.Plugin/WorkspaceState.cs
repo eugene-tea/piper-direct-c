@@ -87,6 +87,9 @@ internal sealed record WorkspaceNavigation(WorkspacePage Page, SettingsCategory 
                 "diagnostics" => SettingsCategory.Diagnostics, _ => SettingsCategory.Robot
             };
             string camera = parts.Length > 1 && category == SettingsCategory.Cameras && IsCamera(parts[1]) ? parts[1] : SettingsCamera;
+            // The bench camera has one page, with its settings under its picture.
+            if (category == SettingsCategory.Cameras && parts.Length > 1 && camera == "bench")
+                return this with { Page = WorkspacePage.Camera, CameraDetail = "bench", CameraReturn = Page == WorkspacePage.Camera ? CameraReturn : Page };
             return this with { Page = WorkspacePage.Settings, Category = category, SettingsCamera = camera };
         }
         if (action.StartsWith("camera.", StringComparison.Ordinal))
@@ -121,6 +124,9 @@ internal static class WorkspaceTabs
 {
     public static readonly string[] RobotTabs = ["Controls", "Cameras", "Setup", "Recording"];
     private static readonly string[] RobotTabActions = ["controls", "robot-cameras", "settings.robot", "recording"];
+    /// <summary>The camera switch on a robot's Cameras tab, in the order of its actions below.</summary>
+    public static readonly string[] RobotCameras = ["Gripper fisheye", "D405 wrist camera"];
+    private static readonly string[] RobotCameraActions = ["settings.cameras.gripper", "settings.cameras.depth"];
 
     /// <summary>A page about the whole bench: the overview, following, the shared camera and the arm server.</summary>
     public static bool BenchPage(WorkspaceNavigation navigation) => navigation.Page switch
@@ -145,10 +151,11 @@ internal static class WorkspaceTabs
     /// <summary>Turns a tab's change event into its navigation action; any other workspace action passes through.</summary>
     public static string Action(string action, System.Text.Json.JsonElement value)
     {
-        if (action != "pages") return action;
-        if (value.ValueKind != System.Text.Json.JsonValueKind.Number || !value.TryGetInt32(out int index) || index < 0 || index >= RobotTabActions.Length)
+        string[]? actions = action switch { "pages" => RobotTabActions, "robot-camera" => RobotCameraActions, _ => null };
+        if (actions is null) return action;
+        if (value.ValueKind != System.Text.Json.JsonValueKind.Number || !value.TryGetInt32(out int index) || index < 0 || index >= actions.Length)
             throw new InvalidOperationException("Unknown workspace tab.");
-        return RobotTabActions[index];
+        return actions[index];
     }
 }
 internal enum SettingsCategory { Robot, Cameras, Bench, Diagnostics }

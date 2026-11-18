@@ -14,18 +14,21 @@ public sealed partial class PipersPlugin
         Widget body = Navigation.Page switch {
             WorkspacePage.Overview => OverviewPage(), WorkspacePage.Follow => FollowPage(),
             WorkspacePage.Settings => SettingsPage(cameraChoices),
-            WorkspacePage.Recording => RecordingPage(), WorkspacePage.Replay => ReplayPage(), WorkspacePage.Camera => CameraDetailPage(), _ => ControlsPage() };
+            WorkspacePage.Recording => RecordingPage(), WorkspacePage.Replay => ReplayPage(), WorkspacePage.Camera => CameraDetailPage(cameraChoices), _ => ControlsPage() };
         var content = Widget.Column("controls",
             Widget.Column("header", Widget.Row("header.title", Widget.Label("workspace.robot-name", ActiveProfile.Name) with { Appearance = "heading", Height = 30 },
-                Widget.Label("workspace.connection", "● Connecting…") with { Height = 30 }),
+                Widget.Label("workspace.connection.dot", "●") with { Width = 14, Height = 30, Appearance = "muted" },
+                Widget.Label("workspace.connection", "Connecting…") with { Height = 30 }),
                 Widget.Label("workspace.next", "") with { Visible = false, Hint = "The one thing to do next for this robot." },
                 Widget.Row("header.actions", Widget.Button("enable", "Enable robot") with { Appearance = "primary" },
-                    Widget.Button("disable", "Disable") with { Width = 76, Hint = "Support the arm before releasing holding torque." })) with { Visible = !bench },
+                    Widget.Button("disable", "Disable") with { Width = 76, Hint = "Support the arm before releasing holding torque." },
+                    // Power on, power off and stop are one group, for the robot this page is about.
+                    Widget.Button("stop", "Stop") with { Width = 64, Appearance = "danger-quiet", Enabled = StopAvailable(ActiveProfile), Hint = StopHint(ActiveProfile) }) with { Visible = Navigation.Page == WorkspacePage.Controls }) with { Visible = !bench },
             Widget.Label("workspace.primary-action", "") with { Height = 48, Visible = false },
             Widget.Label("workspace.action-error", "") with { Height = 64, Visible = false, Appearance = "danger" },
             // Tabs belong to the selected robot. A bench page is not about one robot and shows its own title.
             Widget.Tabs("workspace.pages", WorkspaceTabs.RobotTabs, WorkspaceTabs.PageIndex(Navigation)) with { Icons = ["", "", "gear", ""], Visible = !bench },
-            Widget.Label("workspace.page-title", BenchPageTitle()) with { Appearance = "heading", Visible = bench && Navigation.Page != WorkspacePage.Camera },
+            Widget.Label("workspace.page-title", BenchPageTitle()) with { Appearance = "heading", Visible = bench },
             Widget.Row("safety", Widget.Label("safety.text", "Make sure it is safe to move the robot."),
                 Widget.Button("safety.accept", "Enable robot") with { Appearance = "primary" }, Widget.Button("safety.cancel", "Cancel")) with { Visible = showClearanceConfirmation, Padding = 12, Appearance = "panel" },
             ResetCompletionConfirmation(),
@@ -104,12 +107,12 @@ public sealed partial class PipersPlugin
     {
         bool benchCamera = Navigation.Category == SettingsCategory.Cameras && settingsCamera == "bench";
         Widget section = Navigation.Category switch {
-            // A robot's Cameras tab: its two wrist cameras, then the setup of the one chosen below them.
-            SettingsCategory.Cameras => benchCamera ? Widget.Column("global.cameras", CameraSettingsPage(cameraChoices))
+            // A robot's Cameras tab: choose one of its two wrist cameras, see it beside its simulated
+            // counterpart, and change its settings right under the picture.
+            SettingsCategory.Cameras => benchCamera ? Widget.Column("global.cameras", CameraPanel("bench", 420, cameraChoices))
                 : Widget.Column("global.cameras",
-                    Widget.Column("cameras", CameraHeading("gripper", "Gripper fisheye"), CameraCompare("gripper", 260),
-                        CameraHeading("depth", "D405 wrist camera"), CameraCompare("depth", 260)) with { Spacing = 12 },
-                    CameraSettingsPage(cameraChoices)),
+                    Widget.Segmented("workspace.robot-camera", WorkspaceTabs.RobotCameras, settingsCamera == "depth" ? 1 : 0),
+                    CameraPanel(settingsCamera == "depth" ? "depth" : "gripper", 320, cameraChoices)),
             SettingsCategory.Bench => Widget.Column("global.bench",
                 Widget.Row("global.bench.heading", Widget.Button("workspace.settings.robot@calibration", "Setup") with { Width = 90, Icon = "back", Hint = "Back to this robot's Setup" },
                     Widget.Label("global.bench.title", "Mounting calibration · " + ActiveProfile.Name) with { Appearance = "heading" }),
@@ -121,14 +124,19 @@ public sealed partial class PipersPlugin
             // A robot's Setup tab: everything that belongs to this one arm.
             _ => Widget.Column("global.setup", Section("connections", "CONNECTIONS"), GlobalRobotsSettings(),
                 Section("calibration", "MOUNTING CALIBRATION"),
-                Widget.Row("global.setup.calibration", Widget.Button("workspace.calibration@setup", "Open calibration") with { Width = 170 },
+                Widget.Row("global.setup.calibration", CalibrationLink("setup"),
                     Widget.Label("global.setup.calibration.help", "Where this arm stands on the desk. Guided; it never moves the arm.") with { Appearance = "muted" }) with { Spacing = 10 },
                 Section("diagnostics", "DIAGNOSTICS"),
                 Widget.Label("workspace.power", "Power unavailable"), Widget.Label("link.status", "") with { Height = 50 },
                 Widget.Label("pika.monitor", telemetry.Pika.Status) with { Height = 42 },
                 Widget.Button("workspace.connection-details", workspace.ConnectionDetailsOpen ? "Hide advanced controller actions" : "Advanced controller actions"),
                 Widget.Column("global.advanced", Widget.Button("recovery.run", "Verify controller state"),
-                    Widget.Label("profiles.can.status", "") with { Height = 42 }, PikaReferenceControls()) with { Visible = workspace.ConnectionDetailsOpen })
+                    Widget.Label("profiles.can.status", "") with { Height = 42 }, PikaReferenceControls()) with { Visible = workspace.ConnectionDetailsOpen },
+                // Add robot is at the end of the robot list; this is its counterpart, for this robot.
+                Section("remove", "REMOVE ROBOT"),
+                Widget.Row("global.setup.remove", Widget.Button("global.robot." + ActiveProfile.Id + ".remove", "Remove " + ActiveProfile.Name) with
+                    { Width = 190, Appearance = "danger-quiet", Enabled = preferences.Robots!.Length > 1, Hint = "The last robot cannot be removed." },
+                    Widget.Label("global.setup.remove.help", "Deletes this robot's profile and settings here. The arm itself is not touched.") with { Appearance = "muted" }) with { Spacing = 10 })
         };
         return Widget.Column("workspace.settings.body", section with { Spacing = 12 }) with { Spacing = 16 };
     }

@@ -35,7 +35,7 @@ public sealed partial class PipersPlugin
                 refreshSettings = await ApplyCameraDeviceInventory(lifetime.Token);
             }
             finally { commands.Release(); }
-            if (refreshSettings && CameraDiscoveryRunning && Navigation.Page == WorkspacePage.Settings)
+            if (refreshSettings && CameraDiscoveryRunning && Navigation.Page is WorkspacePage.Settings or WorkspacePage.Camera)
                 await Render(cancellation);
         }
         catch (OperationCanceledException) when (calibration.Cameras.Retired && !cancellation.IsCancellationRequested)

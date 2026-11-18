@@ -27,7 +27,7 @@ public sealed partial class PipersPlugin
             new Widget("checkbox", "group.follow.include." + p.Id) { Text = p.Name, Value = p.FollowSimulationSelected ? 1 : 0, Width = 150,
                 Enabled = !GroupFollowActive, Hint = "Include this robot in the group. Ticking this does not start Play or move hardware." },
             Widget.Label("group.follow.arm." + p.Id, FollowArm(p)) with { Width = 150, Height = 28, Appearance = "muted" },
-            Widget.Label("group.follow.ready." + p.Id, FollowReadiness(p, preparation)) with { Height = 28 }) with { Spacing = 8 }).ToArray();
+            Widget.Label("group.follow.ready." + p.Id, FollowReadiness(p, preparation).Text) with { Height = 28, Appearance = FollowReadiness(p, preparation).Tone }) with { Spacing = 8 }).ToArray();
         return Widget.Column("group.follow",
             Widget.Label("group.follow.steps", FollowSteps(preparation)) with { Height = 28,
                 Hint = "The order for one run. A filled dot is done; the arrow is what to do next." },
@@ -50,23 +50,24 @@ public sealed partial class PipersPlugin
         return arm?.Name ?? (profile.RobotId.Length > 0 ? "Not in this scene" : "No arm assigned");
     }
 
-    private static string FollowReadiness(RobotProfile profile, FollowPreparationReport preparation) =>
-        !profile.FollowSimulationSelected ? "○ not included"
-        : preparation.Issues.FirstOrDefault(issue => issue.ProfileId == profile.Id) is { } issue ? "✗ " + issue.Action
+    private static (string Text, string Tone) FollowReadiness(RobotProfile profile, FollowPreparationReport preparation) =>
+        !profile.FollowSimulationSelected ? ("Not included", "muted")
+        : preparation.Issues.FirstOrDefault(issue => issue.ProfileId == profile.Id) is { } issue ? (issue.Action, "warning")
         // A bench-wide problem (no feedback, an old server) means no robot has been checked yet.
-        : preparation.Issues.Count > 0 ? "○ not checked yet" : "● ready";
+        : preparation.Issues.Count > 0 ? ("Not checked yet", "muted") : ("Ready", "success");
 
     /// <summary>Bench → Overview: every arm's state and next step at a glance.</summary>
     internal Widget OverviewPage()
     {
         var rows = preferences.Robots!.Select(p => Widget.Row("overview.row." + p.Id,
             Widget.Label("overview.name." + p.Id, p.Name) with { Width = 130, Height = 28 },
-            Widget.Label("overview.state." + p.Id, "● " + ProfileStatus(p)) with { Width = 170, Height = 28 },
+            Widget.Label("overview.dot." + p.Id, "●") with { Width = 14, Height = 28, Appearance = StatusTone(ProfileStatus(p)) },
+            Widget.Label("overview.state." + p.Id, StatusText(ProfileStatus(p))) with { Width = 150, Height = 28 },
             Widget.Label("overview.next." + p.Id, OverviewNext(ProfileStatus(p))) with { Height = 28, Appearance = "muted" }) with { Spacing = 8 }).ToArray();
         return Widget.Column("overview",
             Widget.Column("overview.robots", [Widget.Row("overview.columns",
                 Widget.Label("overview.columns.robot", "ROBOT") with { Width = 130, Appearance = "muted" },
-                Widget.Label("overview.columns.state", "STATE") with { Width = 170, Appearance = "muted" },
+                Widget.Label("overview.columns.state", "STATE") with { Width = 172, Appearance = "muted" },
                 Widget.Label("overview.columns.next", "NEXT") with { Appearance = "muted" }) with { Spacing = 8 }, .. rows]) with { Padding = 12, Spacing = 6, Appearance = "panel" },
             Widget.Label("overview.open.help", "Click a robot in the left sidebar to open it.") with { Appearance = "muted", Height = 24 },
             Section("overview.server", "ARM SERVER"),
@@ -145,7 +146,8 @@ public sealed partial class PipersPlugin
         {
             patches["group.follow.include." + profile.Id] = new() { ["value"] = profile.FollowSimulationSelected ? 1 : 0, ["enabled"] = !active };
             patches["group.follow.arm." + profile.Id] = new() { ["text"] = FollowArm(profile) };
-            patches["group.follow.ready." + profile.Id] = new() { ["text"] = FollowReadiness(profile, preparation) };
+            var readiness = FollowReadiness(profile, preparation);
+            patches["group.follow.ready." + profile.Id] = new() { ["text"] = readiness.Text, ["appearance"] = readiness.Tone };
         }
         if (!active) return;
         foreach (string id in patches.Keys.Where(id => GroupBlocksControlEvent(id) && id is not ("enable" or "teaching.help") &&
