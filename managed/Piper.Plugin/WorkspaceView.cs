@@ -5,7 +5,7 @@ namespace LuckyRobots.Piper.Plugin;
 
 public sealed partial class PipersPlugin
 {
-    private static Widget Info(string id, string hint) => Widget.Button(id, "(i)") with { Width = 28, Appearance = "quiet", Hint = hint };
+    private static Widget Info(string id, string hint) => Widget.Button(id, "") with { Width = 30, Icon = "info", Appearance = "quiet", Hint = hint };
     /// <summary>A small capital heading, like the section titles of the editor's own panels.</summary>
     private static Widget Section(string id, string title) => Widget.Label("section." + id, title) with { Appearance = "muted", Height = 22 };
 
@@ -21,7 +21,7 @@ public sealed partial class PipersPlugin
         Widget.Label("workspace.recording.title", "Before the first recording") with { Appearance = "heading" },
         Widget.Label("workspace.recording.subtitle", "Verify the measurements and streams that will be used in the dataset.") with { Appearance = "muted" },
         Widget.Label("workspace.recording.joints", "Joint & gripper feedback · waiting for live readings") with { Height = 34 },
-        Widget.Row("workspace.recording.base", Widget.Label("workspace.recording.base.status", "Tool & base · physical calibration required") with { Height = 36 }, Widget.Button("workspace.calibration@recording", "Calibrate robot")),
+        Widget.Row("workspace.recording.base", Widget.Label("workspace.recording.base.status", "Tool & base · physical calibration required") with { Height = 36 }, Widget.Button("workspace.calibration@recording", "Calibrate robot") with { Width = 170, Icon = "gear", Hint = "Opens Settings → Calibration" }),
         Widget.Row("workspace.recording.cameras", Widget.Label("workspace.recording.cameras.status", "Camera lenses & mounts · not verified") with { Height = 36 }, Info("workspace.recording.camera-info", "A base alignment does not establish the camera-to-tool/world transforms or image correspondence.")),
         Widget.Row("workspace.recording.timing", Widget.Label("workspace.recording.timing.status", "Camera-to-joint timing · not measured") with { Height = 36 }, Info("workspace.recording.time-info", "Preview pipe age excludes exposure delay. Keep exposure/receipt clocks, delay and dropped-sample evidence in each recording.")),
         Widget.Button("workspace.recording.unavailable", "Recording setup pending") with { Enabled = false },
@@ -50,7 +50,11 @@ public sealed partial class PipersPlugin
         foreach (string id in new[] { "bench", "depth", "gripper" })
         {
             bool ready = CameraFrameReady(id);
-            patches["camera." + id + ".empty"] = new() { ["visible"] = !ready, ["text"] = calibration.Capture.Status(id) ?? "Connecting camera…" };
+            string? cameraStatus = calibration.Capture.Status(id);
+            // A raw driver message tells an operator nothing to do; keep it in the tooltip.
+            string shown = cameraStatus is null ? "Connecting camera…" : cameraStatus.StartsWith("Camera unavailable", StringComparison.Ordinal)
+                ? "Camera not responding. Check its USB cable; retrying." : cameraStatus;
+            patches["camera." + id + ".empty"] = new() { ["visible"] = !ready, ["text"] = shown, ["hint"] = cameraStatus ?? shown };
             patches["camera." + id + ".title"] = new() { ["hint"] = calibration.Capture.Status(id) ?? "Waiting for a fresh frame" };
         }
         if (calibrationOpen && calibrationWizard is { } wizard && wizardProfile == ActiveProfile.Id)

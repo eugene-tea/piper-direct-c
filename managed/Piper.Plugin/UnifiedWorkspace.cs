@@ -228,10 +228,7 @@ public sealed partial class PipersPlugin
         // The editor moves a tab as soon as it is clicked. Only a refused navigation needs the tab put
         // back; resending the selection with every update could overwrite a click that is still on its way.
         if (uiActionError.Length > 0)
-        {
             patches["workspace.pages"] = new() { ["value"] = WorkspaceTabs.PageIndex(Navigation) };
-            patches["workspace.categories"] = new() { ["value"] = (int)Navigation.Category };
-        }
         patches["workspace.next"] = new() { ["text"] = "Next: " + next, ["visible"] = next.Length > 0, ["hint"] = detail };
         patches["enable"] = new() { ["text"] = ResumeControlsBusy ? "Resuming controls…" : readiness.Action, ["visible"] = controls,
             ["enabled"] = controls && readiness.Enabled && !PrimaryActionBusy && PrimaryActionAvailable,
@@ -320,8 +317,8 @@ public sealed partial class PipersPlugin
                     Widget.Button(id + ".remove", "Remove robot") with { Enabled = preferences.Robots.Length > 1, Appearance = "quiet" }) with { Spacing = 4 }) with { Spacing = 8, Padding = 10, Appearance = "panel" });
         }
         rows.Add(Widget.Column("global.robot.actions",
-            Widget.Row("global.robot.buttons", Widget.Button("profiles.add", "+ Add robot") with { Width = 130, Enabled = preferences.Robots!.Length < RobotProfileRouting.MaximumProfiles },
-                Widget.Button("global.refresh", "Refresh devices") with { Width = 150 },
+            Widget.Row("global.robot.buttons", Widget.Button("profiles.add", "Add robot") with { Width = 130, Icon = "plus", Enabled = preferences.Robots!.Length < RobotProfileRouting.MaximumProfiles },
+                Widget.Button("global.refresh", "Refresh devices") with { Width = 170, Icon = "refresh" },
                 Widget.Label("global.robot.buttons.fill", "")) with { Spacing = 8 },
             Widget.Label("profiles.inventory", pikaInventoryMessage) with { Appearance = "muted", Height = 44 }) with { Spacing = 6 });
         return Widget.Column("global.robots", rows.ToArray()) with { Spacing = 12 };

@@ -4,8 +4,10 @@ Choose a robot in the left bar. Its state and the one thing to do next are at th
 top; its gripper and joint controls follow, with the two wrist cameras below them.
 The left bar also holds the **Follow simulation** block and the bench camera,
 because every robot shares them. Connection details and configuration live under
-the **Settings** tab beside **Controls** and **Recording**. Hover over an **(i)**
-icon for explanations.
+the **Settings** tab beside **Controls** and **Recording**; while it is open, the
+left bar lists its pages (Robots, Cameras, Calibration, Diagnostics). A gear icon
+anywhere leads to Settings, and the expand icon on a camera opens its enlarged
+real-and-simulation comparison. Hover over an info icon for explanations.
 
 ## Connect and use one robot
 

@@ -669,7 +669,8 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         foreach (string id in new[] { "bench", "gripper", "depth" })
         {
             patches["camera." + id + ".image"] = new() { ["visible"] = CameraFrameReady(id) };
-            patches["camera." + id + ".info"] = new() { ["text"] = calibration.Capture.Status(id) ?? "Waiting for a fresh frame…" };
+            // Without a picture the status is already shown in its place; do not print it twice.
+            patches["camera." + id + ".info"] = new() { ["text"] = calibration.Capture.Status(id) ?? "Waiting for a fresh frame…", ["visible"] = CameraFrameReady(id) };
         }
         patches["camera.gripper.calibration.status"] = new() { ["text"] = lens.Status };
         AddTeachingPatches(patches, device);

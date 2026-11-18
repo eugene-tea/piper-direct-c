@@ -175,7 +175,7 @@ and homing never start automatically from refresh, reconnection or calibration.
 
 ## Public SDK dependency
 
-The source uses the public MIT `LuckyEngine.PluginSdk` 0.1.1 preview package,
+The source uses the public MIT `LuckyEngine.PluginSdk` 0.1.2 preview package,
 pinned under `vendor/plugin-sdk` with its SHA-256 and provenance. Relative
 `NuGet.Config` and bundled source include that feed, so independent authors need
 no engine checkout or private assemblies. Installed packages include the SDK,

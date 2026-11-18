@@ -258,7 +258,7 @@ internal static class WorkspaceViewTests
                 await CheckView("settings", "cameras");
                 long before = plugin.workspace.Epoch;
                 string back = WidgetId("workspace.pages");
-                await Click(WidgetId("workspace.categories"), 2);
+                await Click(WidgetId("workspace.settings.bench"));
                 Check(plugin.workspace.Navigation.Category == SettingsCategory.Cameras && plugin.workspace.Epoch == before &&
                     plugin.uiActionError.Contains("Stop following", StringComparison.Ordinal),
                     "Rejected Bench navigation mutated the published camera page");

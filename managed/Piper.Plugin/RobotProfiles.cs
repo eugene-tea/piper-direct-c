@@ -175,14 +175,27 @@ public sealed partial class PipersPlugin
     private Widget RobotSidebar()
     {
         var rows = preferences.Robots!.Select(p => Widget.Button("profiles.select." + p.Id, ProfileLabel(p)) with
-        { Height = 56, Padding = 12, Appearance = p.Id == ActiveProfile.Id ? "selected" : "quiet", Hint = p.CanDeviceId.Length == 0 ? "Assign an adapter in Settings → Robot" : "Switch to " + p.Name }).ToArray();
+        { Height = 48, Icon = "robot", Appearance = p.Id == ActiveProfile.Id ? "nav-selected" : "nav", Hint = p.CanDeviceId.Length == 0 ? "Assign an adapter in Settings → Robot" : "Switch to " + p.Name }).ToArray();
+        // On Settings the sidebar lists the settings pages, the way the editor's own Settings panel
+        // does. A running follower group keeps its block there, so Stop following is never a page away.
+        if (Navigation.Page == WorkspacePage.Settings)
+        {
+            var links = WorkspaceTabs.CategoryLinks.Select((link, index) => Widget.Button("workspace.settings." + link.Id, WorkspaceTabs.Categories[index]) with
+            { Height = 34, Icon = link.Icon, Appearance = (int)Navigation.Category == index ? "nav-selected" : "nav" }).ToArray();
+            var settings = new List<Widget> { Widget.Label("profiles.heading", "ROBOTS") with { Appearance = "muted" },
+                Widget.Column("profiles.list", rows) with { Spacing = 4 },
+                Widget.Label("sidebar.settings.heading", "SETTINGS") with { Appearance = "muted" },
+                Widget.Column("sidebar.settings.list", links) with { Spacing = 4 } };
+            if (GroupFollowActive) settings.Add(GroupFollowControls());
+            return Widget.Column("sidebar", settings.ToArray()) with { Width = 196, Padding = 12, Spacing = 14, Appearance = "sidebar" };
+        }
         return Widget.Column("sidebar",
             Widget.Label("profiles.heading", "ROBOTS") with { Appearance = "muted" },
-            Widget.Column("profiles.list", rows) with { Spacing = 8 },
+            Widget.Column("profiles.list", rows) with { Spacing = 4 },
             GroupFollowControls(),
             Widget.Label("sidebar.bench.heading", "BENCH CAMERA") with { Appearance = "muted" },
             (Navigation.Page == WorkspacePage.Camera && cameraDetail == "bench" ? Widget.Label("workspace.bench.enlarged", "Bench camera is enlarged") with { Height = 60, Appearance = "muted" } : Camera("bench", "Shared")),
-            Widget.Button("workspace.camera.bench@compare", "Enlarge & compare") with { Appearance = "quiet", Hint = "The bench camera is shared by every robot." }) with { Width = 196, Padding = 12, Spacing = 14, Appearance = "sidebar" };
+            Widget.Button("workspace.camera.bench@compare", "Compare") with { Icon = "expand", Hint = "Enlarge the real and simulated bench views side by side. The bench camera is shared by every robot." }) with { Width = 196, Padding = 12, Spacing = 14, Appearance = "sidebar" };
     }
 
     private string ProfileLabel(RobotProfile profile)

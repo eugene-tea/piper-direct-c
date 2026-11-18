@@ -22,7 +22,7 @@ public sealed partial class PipersPlugin
                     Widget.Button("stop", "STOP") with { Appearance = "danger", Width = 72, Hint = "Controller stop. Holding torque can be lost: support the arm." })),
             Widget.Label("workspace.primary-action", "") with { Height = 48, Visible = false },
             Widget.Label("workspace.action-error", "") with { Height = 64, Visible = false, Appearance = "danger" },
-            new Widget("tabs", "workspace.pages") { Options = WorkspaceTabs.Pages, Value = WorkspaceTabs.PageIndex(Navigation) },
+            Widget.Tabs("workspace.pages", WorkspaceTabs.Pages, WorkspaceTabs.PageIndex(Navigation)) with { Icons = ["", "", "gear"] },
             Widget.Row("safety", Widget.Label("safety.text", "Make sure it is safe to move the robot."),
                 Widget.Button("safety.accept", "Enable robot") with { Appearance = "primary" }, Widget.Button("safety.cancel", "Cancel")) with { Visible = showClearanceConfirmation, Padding = 12, Appearance = "panel" },
             ResetCompletionConfirmation(),
@@ -71,7 +71,7 @@ public sealed partial class PipersPlugin
         widgets.Add(new Widget("checkbox", "global.ghosts") { Text = "Show real robot ghosts", Value = preferences.ShowMeasuredGhosts ? 1 : 0,
             Hint = "Measured hardware pose, visible in Edit and Play. Ghosts are excluded from camera recordings." });
         widgets.Add(Section("cameras", "WRIST CAMERAS"));
-        widgets.Add(Widget.Row("cameras", Camera("gripper", "Gripper fisheye"), Camera("depth", "Depth")) with { Spacing = 14 });
+        widgets.Add(Widget.Row("cameras", Camera("gripper", "Gripper fisheye"), Camera("depth", "D405 wrist camera")) with { Spacing = 14 });
         return Widget.Column("workspace.controls.body", widgets.ToArray()) with { Spacing = 10 };
     }
 
@@ -90,7 +90,7 @@ public sealed partial class PipersPlugin
             _ => GlobalRobotsSettings()
         };
         return Widget.Column("workspace.settings.body",
-            new Widget("tabs", "workspace.categories") { Options = WorkspaceTabs.Categories, Value = (int)Navigation.Category },
+            Widget.Label("workspace.settings.title", WorkspaceTabs.Categories[(int)Navigation.Category]) with { Appearance = "heading", Visible = Navigation.Category != SettingsCategory.Cameras },
             section with { Spacing = 12 }) with { Spacing = 16 };
     }
 }

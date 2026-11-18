@@ -110,15 +110,16 @@ internal sealed record WorkspaceNavigation(WorkspacePage Page, SettingsCategory 
 
 internal enum WorkspacePage { Controls, Recording, Replay, Camera, Settings }
 
-/// <summary>The two native tab strips (plugin API 2). A tab reports the index the operator chose;
-/// this maps it to the same navigation actions the workspace's buttons use, and back.</summary>
+/// <summary>The native page tabs (plugin API 2) and the settings list. A tab reports the index the
+/// operator chose; this maps it to the same navigation actions the workspace's buttons use, and back.</summary>
 internal static class WorkspaceTabs
 {
     public static readonly string[] Pages = ["Controls", "Recording", "Settings"];
     /// <summary>In <see cref="SettingsCategory"/> order.</summary>
     public static readonly string[] Categories = ["Robots", "Cameras", "Calibration", "Diagnostics"];
     private static readonly string[] PageActions = ["controls", "recording", "settings"];
-    private static readonly string[] CategoryActions = ["settings.robot", "settings.cameras", "settings.bench", "settings.diagnostics"];
+    /// <summary>The settings list in the sidebar: button id suffix and icon per category.</summary>
+    public static readonly (string Id, string Icon)[] CategoryLinks = [("robot", "robot"), ("cameras", "camera"), ("bench", "crosshair"), ("diagnostics", "bug")];
 
     /// <summary>The tab a page sits under: a replay belongs to Recording, an enlarged camera to the page it came from.</summary>
     public static int PageIndex(WorkspaceNavigation navigation) => (navigation.Page == WorkspacePage.Camera ? navigation.CameraReturn : navigation.Page) switch
@@ -129,7 +130,7 @@ internal static class WorkspaceTabs
     /// <summary>Turns a tab's change event into its navigation action; any other workspace action passes through.</summary>
     public static string Action(string action, System.Text.Json.JsonElement value)
     {
-        string[]? actions = action switch { "pages" => PageActions, "categories" => CategoryActions, _ => null };
+        string[]? actions = action == "pages" ? PageActions : null;
         if (actions is null) return action;
         if (value.ValueKind != System.Text.Json.JsonValueKind.Number || !value.TryGetInt32(out int index) || index < 0 || index >= actions.Length)
             throw new InvalidOperationException("Unknown workspace tab.");
