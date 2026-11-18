@@ -86,7 +86,11 @@ public sealed partial class PipersPlugin
             shell.Backend.Report("Saved for the next bundled server start. A running external controller is unchanged.");
         }
         else if (action == "instructions")
-            Process.Start(new ProcessStartInfo(Path.Combine(engine.Start.PackageDirectory, "docs", "lucky-engine-plugin.md")) { UseShellExecute = true });
+        {
+            string instructions = Path.Combine(engine.Start.PackageDirectory, "docs", "lucky-engine-plugin.md");
+            BoundedProcess.OpenWithDefaultApplication(instructions);
+            shell.Backend.Report("Setup instructions opened: " + instructions);
+        }
     }
 
     private async Task StartBundledBackend(CancellationToken cancellation)
