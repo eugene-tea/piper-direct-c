@@ -58,8 +58,8 @@ public sealed partial class PipersPlugin
     private BackendSettings BackendOptions => preferences.Backend ?? new();
 
     private Widget BackendSetup() => Widget.Column("backend.setup",
-        Widget.Row("backend.actions", Widget.Button("backend.restart", "Restart backend") with { Hint = "Reopens connections. Releases Pika holding torque; does not clear a robot STOP or replay movement." },
-            Widget.Button("backend.start", "Start bundled server"), Widget.Button("backend.check", "Check Pika setup")),
+        Widget.Row("backend.actions", Widget.Button("backend.restart", "Restart server") with { Hint = "Reopens connections. Releases Pika holding torque; does not clear a robot STOP or replay movement." },
+            Widget.Button("backend.start", "Start server"), Widget.Button("backend.check", "Check gripper setup")),
         Widget.Column("backend.restart.confirmation", Widget.Label("backend.restart.explanation", "Restarting releases all Pika grippers. Empty the jaws first. Arm power stays unchanged; robot STOPs still need recovery.") with { Height = 64 },
             Widget.Row("backend.restart.confirmation.actions", Widget.Button("backend.restart.confirm", "Grippers empty — restart") with { Appearance = "primary" },
                 Widget.Button("backend.restart.cancel", "Cancel"))) with { Visible = shell.Backend.Standing.Restart == BackendRestartPhase.Confirming, Padding = 12, Appearance = "panel" },

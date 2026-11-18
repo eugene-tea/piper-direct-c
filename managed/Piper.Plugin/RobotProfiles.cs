@@ -62,7 +62,12 @@ public static class RobotProfileRouting
         return result;
     }
 
+    /// <summary>The sidebar's STOP for one named robot: "stop.&lt;profile id&gt;". It names its robot
+    /// itself, so it is the same button whichever robot or page is open.</summary>
+    public const string RobotStopPrefix = "stop.";
+
     public static bool SharedWidget(string id) => id.StartsWith("profiles.select.", StringComparison.Ordinal) ||
+        id.StartsWith(RobotStopPrefix, StringComparison.Ordinal) ||
         id.StartsWith("group.follow.", StringComparison.Ordinal) && id != "group.follow.selected" ||
         id.StartsWith("global.", StringComparison.Ordinal) ||
         id is "profiles.add" or "profiles.heading" or "profiles.list" or "profiles.edit" or "profiles.mode" ||
@@ -172,39 +177,49 @@ public sealed partial class PipersPlugin
             ? PublishWorkspacePatch(scope, patches, cancellation)
             : Task.CompletedTask;
 
-    private Widget RobotSidebar()
+    /// <summary>The only navigation of the workspace, drawn with the editor's own Settings-sidebar
+    /// list: group headings, one indented row per page, a hairline between groups.</summary>
+    internal Widget RobotSidebar()
     {
-        var rows = preferences.Robots!.Select(p => Widget.Button("profiles.select." + p.Id, ProfileLabel(p)) with
-        { Height = 48, Icon = "robot", Appearance = p.Id == ActiveProfile.Id ? "nav-selected" : "nav", Hint = p.CanDeviceId.Length == 0 ? "Assign an adapter in Settings → Robot" : "Switch to " + p.Name }).ToArray();
-        // On Settings the sidebar lists the settings pages, the way the editor's own Settings panel
-        // does. A running follower group keeps its block there, so Stop following is never a page away.
-        if (Navigation.Page == WorkspacePage.Settings)
-        {
-            var links = WorkspaceTabs.CategoryLinks.Select((link, index) => Widget.Button("workspace.settings." + link.Id, WorkspaceTabs.Categories[index]) with
-            { Height = 34, Icon = link.Icon, Appearance = (int)Navigation.Category == index ? "nav-selected" : "nav" }).ToArray();
-            var settings = new List<Widget> { Widget.Label("profiles.heading", "ROBOTS") with { Appearance = "muted" },
-                Widget.Column("profiles.list", rows) with { Spacing = 4 },
-                Widget.Label("sidebar.settings.heading", "SETTINGS") with { Appearance = "muted" },
-                Widget.Column("sidebar.settings.list", links) with { Spacing = 4 } };
-            if (GroupFollowActive) settings.Add(GroupFollowControls());
-            return Widget.Column("sidebar", settings.ToArray()) with { Width = 196, Padding = 12, Spacing = 14, Appearance = "sidebar" };
-        }
-        return Widget.Column("sidebar",
-            Widget.Label("profiles.heading", "ROBOTS") with { Appearance = "muted" },
-            Widget.Column("profiles.list", rows) with { Spacing = 4 },
-            GroupFollowControls(),
-            Widget.Label("sidebar.bench.heading", "BENCH CAMERA") with { Appearance = "muted" },
-            (Navigation.Page == WorkspacePage.Camera && cameraDetail == "bench" ? Widget.Label("workspace.bench.enlarged", "Bench camera is enlarged") with { Height = 60, Appearance = "muted" } : Camera("bench", "Shared")),
-            Widget.Button("workspace.camera.bench@compare", "Compare") with { Icon = "expand", Hint = "Enlarge the real and simulated bench views side by side. The bench camera is shared by every robot." }) with { Width = 196, Padding = 12, Spacing = 14, Appearance = "sidebar" };
+        bool bench = WorkspaceTabs.BenchPage(Navigation);
+        bool serverPage = Navigation.Page == WorkspacePage.Settings && Navigation.Category == SettingsCategory.Diagnostics;
+        bool benchCamera = bench && (Navigation.Page == WorkspacePage.Camera || Navigation.Page == WorkspacePage.Settings && Navigation.Category == SettingsCategory.Cameras);
+        // Every robot keeps its own Stop beside its name, on every page.
+        var robots = preferences.Robots!.Select(p => (Widget)(Widget.Row("profiles.row." + p.Id,
+            Widget.NavItem("profiles.select." + p.Id, ProfileLabel(p), "robot", !bench && p.Id == ActiveProfile.Id) with
+                { Hint = p.CanDeviceId.Length == 0 ? "Assign an adapter in this robot's Setup tab" : "Open " + p.Name },
+            Widget.Button(RobotProfileRouting.RobotStopPrefix + p.Id, "Stop") with { Height = 28, Width = 52, Appearance = "danger-quiet",
+                Hint = "Stop " + p.Name + " now. Holding torque can be lost: support the arm." },
+            Widget.Label("profiles.row.pad." + p.Id, "") with { Width = 16 }) with { Spacing = 4 })).ToList();
+        robots.Add(Widget.NavItem("profiles.add", "Add robot", "plus", false) with { Hint = "Add another arm to this bench",
+            Enabled = preferences.Robots!.Length < RobotProfileRouting.MaximumProfiles });
+        var rows = new List<Widget> { Widget.NavGroup("profiles.heading", "Robots", "robot", !bench) };
+        rows.AddRange(robots);
+        rows.AddRange([
+            Widget.Separator("sidebar.bench.separator"),
+            Widget.NavGroup("sidebar.bench.heading", "Bench", "scene", bench && !serverPage),
+            Widget.NavItem("workspace.overview", "Overview", "eye", Navigation.Page == WorkspacePage.Overview) with { Hint = "Every arm at a glance" },
+            Widget.NavItem("workspace.follow", "Follow simulation", "play", Navigation.Page == WorkspacePage.Follow) with { Hint = "Choose the arms that follow the simulation and start a run" },
+            // Always one click away, on every page, while a group is armed or running.
+            Widget.Row("group.follow.cancel.row", Widget.Label("group.follow.cancel.pad", "") with { Width = 28 },
+                Widget.Button("group.follow.cancel", "Stop following") with { Height = 30, Width = 150, Visible = GroupFollowActive,
+                    Hint = "Stop sending targets, request a hold for the arms and grippers used, and pause the simulation." }),
+            Widget.NavItem("workspace.camera.bench@nav", "Bench camera", "camera", benchCamera) with { Hint = "The camera beside the desk, shared by every robot" },
+            Widget.Separator("sidebar.settings.separator"),
+            Widget.NavGroup("sidebar.settings.heading", "Settings", "gear", serverPage),
+            Widget.NavItem("workspace.settings.diagnostics@nav", "Arm server", "server", serverPage) with { Hint = "Start, restart and inspect the server that runs every arm and gripper" }]);
+        // The Settings sidebar's own width and row gap; rows reach both edges so the lit row spans it.
+        return Widget.Column("sidebar", rows.ToArray()) with { Width = 220, Padding = 4, Spacing = 2, Appearance = "sidebar" };
     }
 
-    private string ProfileLabel(RobotProfile profile)
+    private string ProfileLabel(RobotProfile profile) => profile.Name + "\n" + ProfileStatus(profile);
+
+    private string ProfileStatus(RobotProfile profile)
     {
         var device = state?["devices"]?.AsArray().FirstOrDefault(d => d?["id"]?.GetValue<string>() == profile.CanDeviceId);
-        string status = string.IsNullOrEmpty(profile.CanDeviceId) ? "unassigned" : device?["present"]?.GetValue<bool>() != true ? "offline" :
+        return string.IsNullOrEmpty(profile.CanDeviceId) ? "unassigned" : device?["present"]?.GetValue<bool>() != true ? "offline" :
             device["recovery_required"]?.GetValue<bool>() == true || device["status"]?["arm_status"]?.GetValue<int>() == 1 ? "Needs recovery" :
             GroupFollowIncludes(profile.Id) ? "In follower group" : "connected";
-        return profile.Name + "\n" + status;
     }
 
     private async Task ObserveProfileRouting(JsonObject snapshot, CancellationToken cancellation)
@@ -264,6 +279,8 @@ public sealed partial class PipersPlugin
         foreach (var profile in preferences.Robots!)
         {
             patches["profiles.select." + profile.Id] = new() { ["text"] = ProfileLabel(profile), ["enabled"] = true };
+            patches["overview.state." + profile.Id] = new() { ["text"] = "● " + ProfileStatus(profile) };
+            patches["overview.next." + profile.Id] = new() { ["text"] = OverviewNext(ProfileStatus(profile)) };
             var assignment = SceneArmAssignment(profile, settingsRobotOptions);
             patches[assignment.Id] = new() { ["text"] = assignment.Text };
         }

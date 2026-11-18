@@ -40,7 +40,7 @@ internal sealed class OwnedBackend
         $"Use the existing controller, or start the bundled server when ports {ControllerEndpoint.HttpPort}/{ControllerEndpoint.GrpcPort} are free.",
         OperatingSystem.IsWindows()
             ? "Windows Pika requires WSL 2 + a Linux distribution and usbipd-win. Share only the Pika USB device with WSL. Driver/USB setup is explicit; see plugin instructions."
-            : "Each Pika gripper connects by USB serial. Assign it to its robot in Settings → Robots.");
+            : "Each Pika gripper connects by USB serial. Assign it in that robot's Setup tab.");
 
     public BackendStanding Standing => Volatile.Read(ref standing);
 

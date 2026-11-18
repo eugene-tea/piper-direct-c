@@ -254,10 +254,6 @@ public sealed partial class PipersPlugin
         patches["recovery.guide.cancel"] = new() { ["visible"] = currentRecoveryGuide || CurrentRecovery is not null };
     }
 
-    private Widget SettingsRobotPicker(string target) => Widget.Row("global.context." + target,
-        preferences.Robots!.Select(p => Widget.Button("global.context." + target + "." + p.Id, p.Name) with {
-            Appearance = p.Id == ActiveProfile.Id ? "selected" : "quiet", Hint = "Configure " + p.Name + " here in shared Settings" }).ToArray()) with { Spacing = 8 };
-
     /// <summary>Gripper discovery is a session-owned route: a server this plugin started
     /// refuses it without the plugin's owner, exactly like the other Pika requests.</summary>
     internal ApiRequest PikaInventoryRequest() => PiperApi.Requests.PikaDevices(owner, pikaDistribution: ActiveProfile.PikaDistribution);
@@ -271,7 +267,7 @@ public sealed partial class PipersPlugin
             pikaInventoryMessage = pikaDevices.Length == 0 ? "No Pika detected. Connect its USB cable; discovery retries automatically." : $"{pikaDevices.Length} grippers detected · assignments are saved automatically";
         }
         catch (global::Grpc.Core.RpcException error) when (error.StatusCode == global::Grpc.Core.StatusCode.Unavailable)
-        { pikaInventoryMessage = "The arm server is not running, so grippers cannot be listed. Start it in Settings → Diagnostics."; }
+        { pikaInventoryMessage = "The arm server is not running, so grippers cannot be listed. Start it under Settings → Arm server."; }
         catch (Exception error) when (error is not OperationCanceledException)
         { pikaInventoryMessage = "Gripper discovery: " + error.Message; }
         pikaInventoryAt = Stopwatch.GetTimestamp();
@@ -282,8 +278,9 @@ public sealed partial class PipersPlugin
         var robots = SceneRobotBindings.Options(scene?["robots"]?.AsArray().OfType<JsonObject>() ?? []);
         settingsRobotOptions = robots;
         settingsRobotChoices = preferences.Robots!.ToDictionary(p => p.Id, p => SceneRobotBindings.AvailableFor(settingsRobotOptions, preferences.Robots!, p), StringComparer.Ordinal);
-        var rows = new List<Widget> { Widget.Label("global.robot.assignment.help", "Connect each real robot to one simulated arm. Each arm can be assigned once.") with { Appearance = "muted", Height = 28 } };
-        foreach (var profile in preferences.Robots!)
+        var rows = new List<Widget> { Widget.Label("global.robot.assignment.help", "Connect this real robot to one simulated arm. Each arm can be assigned once.") with { Appearance = "muted", Height = 28 } };
+        // The sidebar already says which robot this is; other robots are set up on their own pages.
+        foreach (var profile in new[] { ActiveProfile })
         {
             string id = "global.robot." + profile.Id;
             string[] canChoices = ["Unassigned", ..knownCanIds.Select(CanFriendlyName)];
@@ -314,10 +311,10 @@ public sealed partial class PipersPlugin
                     Widget.Button(id + ".setup", "Set up USB gripper") with { Width = 160,
                         Visible = OperatingSystem.IsWindows() && devices.Any(d => d["device"]?.GetValue<string>() == profile.PikaDevice && d["available"]?.GetValue<bool>() != true),
                         Hint = "One-time Windows USB sharing for the selected Pika; no motor commands." },
-                    Widget.Button(id + ".remove", "Remove robot") with { Enabled = preferences.Robots.Length > 1, Appearance = "quiet" }) with { Spacing = 4 }) with { Spacing = 8, Padding = 10, Appearance = "panel" });
+                    Widget.Button(id + ".remove", "Remove robot") with { Enabled = preferences.Robots!.Length > 1 }) with { Spacing = 4 }) with { Spacing = 8, Padding = 10, Appearance = "panel" });
         }
         rows.Add(Widget.Column("global.robot.actions",
-            Widget.Row("global.robot.buttons", Widget.Button("profiles.add", "Add robot") with { Width = 130, Icon = "plus", Enabled = preferences.Robots!.Length < RobotProfileRouting.MaximumProfiles },
+            Widget.Row("global.robot.buttons",
                 Widget.Button("global.refresh", "Refresh devices") with { Width = 170, Icon = "refresh" },
                 Widget.Label("global.robot.buttons.fill", "")) with { Spacing = 8 },
             Widget.Label("profiles.inventory", pikaInventoryMessage) with { Appearance = "muted", Height = 44 }) with { Spacing = 6 });

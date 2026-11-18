@@ -10,7 +10,9 @@ public sealed partial class PipersPlugin
 
     private Widget BuildWorkspaceView(bool showClearanceConfirmation, SimulationCameraChoices cameraChoices)
     {
+        bool bench = WorkspaceTabs.BenchPage(Navigation);
         Widget body = Navigation.Page switch {
+            WorkspacePage.Overview => OverviewPage(), WorkspacePage.Follow => FollowPage(),
             WorkspacePage.Settings => SettingsPage(cameraChoices),
             WorkspacePage.Recording => RecordingPage(), WorkspacePage.Replay => ReplayPage(), WorkspacePage.Camera => CameraDetailPage(), _ => ControlsPage() };
         var content = Widget.Column("controls",
@@ -18,11 +20,12 @@ public sealed partial class PipersPlugin
                 Widget.Label("workspace.connection", "● Connecting…") with { Height = 30 }),
                 Widget.Label("workspace.next", "") with { Visible = false, Hint = "The one thing to do next for this robot." },
                 Widget.Row("header.actions", Widget.Button("enable", "Enable robot") with { Appearance = "primary" },
-                    Widget.Button("disable", "Disable") with { Width = 68, Appearance = "quiet", Hint = "Support the arm before releasing holding torque." },
-                    Widget.Button("stop", "STOP") with { Appearance = "danger", Width = 72, Hint = "Controller stop. Holding torque can be lost: support the arm." })),
+                    Widget.Button("disable", "Disable") with { Width = 76, Hint = "Support the arm before releasing holding torque." })) with { Visible = !bench },
             Widget.Label("workspace.primary-action", "") with { Height = 48, Visible = false },
             Widget.Label("workspace.action-error", "") with { Height = 64, Visible = false, Appearance = "danger" },
-            Widget.Tabs("workspace.pages", WorkspaceTabs.Pages, WorkspaceTabs.PageIndex(Navigation)) with { Icons = ["", "", "gear"] },
+            // Tabs belong to the selected robot. A bench page is not about one robot and shows its own title.
+            Widget.Tabs("workspace.pages", WorkspaceTabs.RobotTabs, WorkspaceTabs.PageIndex(Navigation)) with { Icons = ["", "", "gear", ""], Visible = !bench },
+            Widget.Label("workspace.page-title", BenchPageTitle()) with { Appearance = "heading", Visible = bench && Navigation.Page != WorkspacePage.Camera },
             Widget.Row("safety", Widget.Label("safety.text", "Make sure it is safe to move the robot."),
                 Widget.Button("safety.accept", "Enable robot") with { Appearance = "primary" }, Widget.Button("safety.cancel", "Cancel")) with { Visible = showClearanceConfirmation, Padding = 12, Appearance = "panel" },
             ResetCompletionConfirmation(),
@@ -34,8 +37,25 @@ public sealed partial class PipersPlugin
                 Widget.Button("recovery.card.run", "Open recovery") with { Enabled = false, Hint = "The current recovery step and unmet conditions appear above." },
                 Widget.Button("recovery.home", "Arm resting, path clear — recover to zero") with { Enabled = false },
                 Widget.Button("recovery.guide.cancel", "Cancel recovery guide") with { Visible = false, Appearance = "quiet" }) with { Visible = false, Padding = 12, Spacing = 8, Appearance = "panel" },
-            body, Widget.Label("status", "Connecting…") with { Height = 28, Appearance = "muted" }) with { Padding = 18, Spacing = 12 };
-        return Widget.Row("workspace", RobotSidebar(), content) with { Spacing = 0 };
+            body, Widget.Label("status", "Connecting…") with { Height = 28, Appearance = "muted", Visible = !bench }) with { Padding = 18, Spacing = 12 };
+        return Widget.Row("workspace", RobotSidebar(), TidyLayout(content, inColumn: false)) with { Spacing = 0 };
+    }
+
+    /// <summary>One layout rule for every page, applied after the page is built:
+    /// a button placed straight into a column would stretch across the whole pane whatever width it
+    /// asks for, so it gets a row of its own and keeps its own width; and a wrapping text label in a column takes the
+    /// height of its text, not a fixed block that leaves a gap when the text is short.</summary>
+    internal static Widget TidyLayout(Widget widget, bool inColumn)
+    {
+        var tidy = widget.Children is null ? widget
+            : widget with { Children = widget.Children.Select(child => TidyLayout(child, widget.Type == "column")).ToArray() };
+        if (!inColumn) return tidy;
+        if (widget.Type == "button")
+            // The row stays visible: a later patch shows or hides the button itself, never this wrapper.
+            return Widget.Row(widget.Id + "@fit", tidy);
+        if (widget.Type is "text" or "markdown" && widget.Height > 32 && widget.Appearance != "numeric")
+            return tidy with { Height = null };
+        return tidy;
     }
 
     internal Widget ControlsPage()
@@ -70,27 +90,46 @@ public sealed partial class PipersPlugin
             Info("workspace.link-info", "The solid robot is the simulated leader. The translucent ghost shows measured real joint and gripper feedback.")));
         widgets.Add(new Widget("checkbox", "global.ghosts") { Text = "Show real robot ghosts", Value = preferences.ShowMeasuredGhosts ? 1 : 0,
             Hint = "Measured hardware pose, visible in Edit and Play. Ghosts are excluded from camera recordings." });
-        widgets.Add(Section("cameras", "WRIST CAMERAS"));
-        widgets.Add(Widget.Row("cameras", Camera("gripper", "Gripper fisheye"), Camera("depth", "D405 wrist camera")) with { Spacing = 14 });
         return Widget.Column("workspace.controls.body", widgets.ToArray()) with { Spacing = 10 };
     }
 
+    private string BenchPageTitle() => Navigation.Page switch
+    {
+        WorkspacePage.Overview => "Bench overview", WorkspacePage.Follow => "Follow simulation",
+        WorkspacePage.Camera => "Bench camera",
+        _ => Navigation.Category == SettingsCategory.Cameras ? "Bench camera setup" : "Arm server"
+    };
+
     private Widget SettingsPage(SimulationCameraChoices cameraChoices)
     {
+        bool benchCamera = Navigation.Category == SettingsCategory.Cameras && settingsCamera == "bench";
         Widget section = Navigation.Category switch {
-            SettingsCategory.Cameras => Widget.Column("global.cameras", SettingsRobotPicker("cameras"), CameraSettingsPage(cameraChoices)),
-            SettingsCategory.Bench => Widget.Column("global.bench", Widget.Label("global.bench.shared", "Shared desk reference · each arm keeps its own mounting alignment") with { Height = 32, Appearance = "muted" },
-                SettingsRobotPicker("bench"), CalibrationSheetControls()),
-            SettingsCategory.Diagnostics => Widget.Column("global.diagnostics", SettingsRobotPicker("diagnostics"),
-                Widget.Label("workspace.power", "Power unavailable") with { Appearance = "numeric" }, Widget.Label("link.status", "") with { Height = 50 },
-                Widget.Label("pika.monitor", telemetry.Pika.Status) with { Height = 42 }, BackendSetup(),
-                Widget.Button("workspace.connection-details", workspace.ConnectionDetailsOpen ? "Hide advanced controller actions" : "Advanced controller actions") with { Appearance = "quiet" },
+            // A robot's Cameras tab: its two wrist cameras, then the setup of the one chosen below them.
+            SettingsCategory.Cameras => benchCamera ? Widget.Column("global.cameras", CameraSettingsPage(cameraChoices))
+                : Widget.Column("global.cameras",
+                    Widget.Column("cameras", CameraHeading("gripper", "Gripper fisheye"), CameraCompare("gripper", 260),
+                        CameraHeading("depth", "D405 wrist camera"), CameraCompare("depth", 260)) with { Spacing = 12 },
+                    CameraSettingsPage(cameraChoices)),
+            SettingsCategory.Bench => Widget.Column("global.bench",
+                Widget.Row("global.bench.heading", Widget.Button("workspace.settings.robot@calibration", "Setup") with { Width = 90, Icon = "back", Hint = "Back to this robot's Setup" },
+                    Widget.Label("global.bench.title", "Mounting calibration · " + ActiveProfile.Name) with { Appearance = "heading" }),
+                Widget.Label("global.bench.shared", "Shared desk reference · each arm keeps its own mounting alignment") with { Height = 32, Appearance = "muted" },
+                CalibrationSheetControls()),
+            SettingsCategory.Diagnostics => Widget.Column("global.diagnostics",
+                Widget.Label("global.server.help", "One arm server runs the whole bench: every arm and every gripper.") with { Appearance = "muted", Height = 28 },
+                BackendSetup()),
+            // A robot's Setup tab: everything that belongs to this one arm.
+            _ => Widget.Column("global.setup", Section("connections", "CONNECTIONS"), GlobalRobotsSettings(),
+                Section("calibration", "MOUNTING CALIBRATION"),
+                Widget.Row("global.setup.calibration", Widget.Button("workspace.calibration@setup", "Open calibration") with { Width = 170 },
+                    Widget.Label("global.setup.calibration.help", "Where this arm stands on the desk. Guided; it never moves the arm.") with { Appearance = "muted" }) with { Spacing = 10 },
+                Section("diagnostics", "DIAGNOSTICS"),
+                Widget.Label("workspace.power", "Power unavailable"), Widget.Label("link.status", "") with { Height = 50 },
+                Widget.Label("pika.monitor", telemetry.Pika.Status) with { Height = 42 },
+                Widget.Button("workspace.connection-details", workspace.ConnectionDetailsOpen ? "Hide advanced controller actions" : "Advanced controller actions"),
                 Widget.Column("global.advanced", Widget.Button("recovery.run", "Verify controller state"),
-                    Widget.Label("profiles.can.status", "") with { Height = 42 }, PikaReferenceControls()) with { Visible = workspace.ConnectionDetailsOpen }),
-            _ => GlobalRobotsSettings()
+                    Widget.Label("profiles.can.status", "") with { Height = 42 }, PikaReferenceControls()) with { Visible = workspace.ConnectionDetailsOpen })
         };
-        return Widget.Column("workspace.settings.body",
-            Widget.Label("workspace.settings.title", WorkspaceTabs.Categories[(int)Navigation.Category]) with { Appearance = "heading", Visible = Navigation.Category != SettingsCategory.Cameras },
-            section with { Spacing = 12 }) with { Spacing = 16 };
+        return Widget.Column("workspace.settings.body", section with { Spacing = 12 }) with { Spacing = 16 };
     }
 }

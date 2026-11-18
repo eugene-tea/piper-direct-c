@@ -26,7 +26,7 @@ public sealed partial class PipersPlugin
         Widget.Row("workspace.recording.timing", Widget.Label("workspace.recording.timing.status", "Camera-to-joint timing · not measured") with { Height = 36 }, Info("workspace.recording.time-info", "Preview pipe age excludes exposure delay. Keep exposure/receipt clocks, delay and dropped-sample evidence in each recording.")),
         Widget.Button("workspace.recording.unavailable", "Recording setup pending") with { Enabled = false },
         Widget.Button("workspace.replay", "Review a simulation episode for physical replay") with { Width = 350 },
-        Widget.Label("workspace.recording.note", "Use the engine's recorder after the required calibration and timing checks. This page does not start a recording or claim synchronized data.") with { Height = 48, Appearance = "muted" }) with { Padding = 14, Spacing = 18 };
+        Widget.Label("workspace.recording.note", "Use the engine's recorder after the required calibration and timing checks. This page does not start a recording or claim synchronized data.") with { Height = 48, Appearance = "muted" }) with { Spacing = 14 };
 
     private void AddWorkspacePatches(Dictionary<string, JsonObject> patches, JsonObject? device)
     {

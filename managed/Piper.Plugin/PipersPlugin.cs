@@ -303,7 +303,10 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
-            uiActionError = "Action failed: " + error.Message;
+            // A stopped arm server is the common cause; say what to do instead of printing the transport error.
+            uiActionError = error is RpcException { StatusCode: StatusCode.Unavailable }
+                ? "That needs the arm server, which is not running. Start it under Settings → Arm server."
+                : "Action failed: " + error.Message;
             message = uiActionError;
             await Update(cancellation);
         }
@@ -379,7 +382,7 @@ public sealed partial class PipersPlugin : ILuckyPlugin
             {
                 if (parts[2] == "device") settings = settings with { Device = CameraDeviceChoices.Resolve(cameraDeviceChoices, input.Value, CameraSettings(camera).Device), Enabled = true };
                 if (parts[2] == "toggle") settings = settings with { Enabled = !settings.Enabled };
-                if (camera == "depth" && parts[2] is "view" or "selectcolor" or "selectdepth") settings = D405View.Select(settings, parts[2] == "view" ? input.Value.GetInt32() : parts[2] == "selectdepth" ? 1 : 0);
+                if (camera == "depth" && parts[2] is "view" or "mode" or "selectcolor" or "selectdepth") settings = D405View.Select(settings, parts[2] is "view" or "mode" ? input.Value.GetInt32() : parts[2] == "selectdepth" ? 1 : 0);
                 if (parts[2] == "serial") preferences = preferences with { DepthSerial = CameraDeviceChoices.Resolve(depthDeviceChoices, input.Value, "") };
                 preferences = camera switch { "bench" => preferences with { Bench = settings }, "gripper" => preferences with { Gripper = settings }, _ => preferences with { Depth = settings } };
                 await Save(cancellation); await RestartCamera(camera);
@@ -670,7 +673,8 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         {
             patches["camera." + id + ".image"] = new() { ["visible"] = CameraFrameReady(id) };
             // Without a picture the status is already shown in its place; do not print it twice.
-            patches["camera." + id + ".info"] = new() { ["text"] = calibration.Capture.Status(id) ?? "Waiting for a fresh frame…", ["visible"] = CameraFrameReady(id) };
+            patches["camera." + id + ".info"] = new() { ["text"] = calibration.Capture.Status(id) ?? "Waiting for a fresh frame…" };
+            patches["camera." + id + ".frame-info"] = new() { ["text"] = calibration.Capture.Status(id) ?? "Waiting for a fresh frame…", ["visible"] = CameraFrameReady(id) };
         }
         patches["camera.gripper.calibration.status"] = new() { ["text"] = lens.Status };
         AddTeachingPatches(patches, device);
