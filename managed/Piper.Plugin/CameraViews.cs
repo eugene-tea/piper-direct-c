@@ -54,7 +54,6 @@ public sealed partial class PipersPlugin
     {
         var settings = CameraSettings(id);
         return Widget.Column("workspace.settings.cameras.section", Section("camera-settings", "CAMERA SETTINGS"),
-            Widget.Label("workspace.settings.camera-scope", id == "bench" ? "One bench camera is shared by all robot profiles." : "These camera settings belong to " + ActiveProfile.Name + ".") with { Appearance = "muted", Height = 28 },
             Field("camera." + id + ".device", "Camera device", cameraDeviceChoices.Length > 0
                 ? new Widget("dropdown", "camera." + id + ".device") { Options = new[] { "Choose camera" }.Concat(cameraDeviceChoices.Select(choice => choice.Label)).ToArray(),
                     Value = CameraDeviceChoices.Index(cameraDeviceChoices, settings.Device), Hint = "Selections use stable device identities. Duplicate camera names are separated by their USB connection." }

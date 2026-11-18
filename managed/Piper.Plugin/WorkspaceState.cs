@@ -122,8 +122,9 @@ internal enum WorkspacePage { Controls, Recording, Replay, Camera, Settings, Ove
 /// belongs to no single robot and has none.</summary>
 internal static class WorkspaceTabs
 {
-    public static readonly string[] RobotTabs = ["Controls", "Cameras", "Setup", "Recording"];
-    private static readonly string[] RobotTabActions = ["controls", "robot-cameras", "settings.robot", "recording"];
+    // Setup comes last: the tabs you work in first, configuration at the end.
+    public static readonly string[] RobotTabs = ["Controls", "Cameras", "Recording", "Setup"];
+    private static readonly string[] RobotTabActions = ["controls", "robot-cameras", "recording", "settings.robot"];
     /// <summary>The camera switch on a robot's Cameras tab, in the order of its actions below.</summary>
     public static readonly string[] RobotCameras = ["Gripper fisheye", "D405 wrist camera"];
     private static readonly string[] RobotCameraActions = ["settings.cameras.gripper", "settings.cameras.depth"];
@@ -142,9 +143,9 @@ internal static class WorkspaceTabs
     /// an enlarged wrist camera to Cameras.</summary>
     public static int PageIndex(WorkspaceNavigation navigation) => navigation.Page switch
     {
-        WorkspacePage.Recording or WorkspacePage.Replay => 3,
+        WorkspacePage.Recording or WorkspacePage.Replay => 2,
         WorkspacePage.Camera => 1,
-        WorkspacePage.Settings => navigation.Category == SettingsCategory.Cameras ? 1 : 2,
+        WorkspacePage.Settings => navigation.Category == SettingsCategory.Cameras ? 1 : 3,
         _ => 0
     };
 

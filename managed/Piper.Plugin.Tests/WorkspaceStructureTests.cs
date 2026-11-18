@@ -14,7 +14,7 @@ internal static class WorkspaceStructureTests
         var start = WorkspaceNavigation.Initial;
         JsonElement Index(int value) => JsonSerializer.SerializeToElement(value);
         // Each robot tab lands on a page that reports the same tab back.
-        string[] expected = ["controls", "robot-cameras", "settings.robot", "recording"];
+        string[] expected = ["controls", "robot-cameras", "recording", "settings.robot"];
         for (int tab = 0; tab < WorkspaceTabs.RobotTabs.Length; tab++)
         {
             string action = WorkspaceTabs.Action("pages", Index(tab));
@@ -35,7 +35,7 @@ internal static class WorkspaceStructureTests
         var robotCameras = start.Navigate("settings.cameras.bench").Navigate("robot-cameras");
         Check(robotCameras is { Page: WorkspacePage.Settings, Category: SettingsCategory.Cameras } && robotCameras.SettingsCamera != "bench",
             "A robot's Cameras tab opened the shared bench camera");
-        Check(start.Navigate("settings.bench").CalibrationOpen && WorkspaceTabs.PageIndex(start.Navigate("settings.bench")) == 2,
+        Check(start.Navigate("settings.bench").CalibrationOpen && WorkspaceTabs.PageIndex(start.Navigate("settings.bench")) == 3,
             "Mounting calibration no longer sits under the robot's Setup tab");
     }
 
