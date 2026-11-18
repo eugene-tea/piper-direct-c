@@ -55,7 +55,7 @@ public sealed record RobotReadiness(string Label, string Action, bool Enabled, s
             return Step("Controller needs attention", "Controls unavailable", blocker);
         }
         if (needsConnection) return Step(power.AllEnabled ? "Enabled · finish connection" : "Disabled", "Enable robot", "One action connects the assigned arm and gripper and restores holding control.", RobotPrimaryAction.Enable);
-        return Step("Ready · arm and gripper enabled", "Enabled", "Tick Include in the left sidebar, then press Follow simulation.");
+        return Step("Ready · arm and gripper enabled", "Enabled", "Open Bench → Follow simulation, tick Include for this robot, then press Follow simulation.");
     }
 }
 
@@ -161,7 +161,7 @@ public sealed partial class PipersPlugin
             await StartMeasuredLink(automatic: false, cancellation);
         }
         RememberControlApproval(expectedPermission);
-        message = "Ready · arm and gripper enabled. Tick Include in the left sidebar, then press Follow simulation.";
+        message = "Ready · arm and gripper enabled. Open Bench → Follow simulation, tick Include, then press Follow simulation.";
     }
 
     private async Task PrimaryActionProgress(string stage, string text, CancellationToken cancellation)

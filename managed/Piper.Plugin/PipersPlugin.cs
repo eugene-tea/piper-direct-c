@@ -292,7 +292,10 @@ public sealed partial class PipersPlugin : ILuckyPlugin
             {
                 if (calibrationOpen && (id.StartsWith("profiles.select.", StringComparison.Ordinal) || id is "profiles.add" or "profiles.remove"))
                 { await StopHeightCheck(cancellation); await ClearWizardHighlight(cancellation); }
-                await ProfileEvent(rest, cancellation);
+                // Clicking the robot that is already open is how you come back from a bench page. That is
+                // navigation only: a profile switch would hold a moving arm, revoke control, release the
+                // gripper and cancel a recovery in progress.
+                if (id != "profiles.select." + ActiveProfile.Id) await ProfileEvent(rest, cancellation);
                 // Selecting a robot returns to its controls through the same
                 // publication gate as every other navigation.
                 await PublishWorkspaceView(cancellation, Navigation.Navigate("controls"));

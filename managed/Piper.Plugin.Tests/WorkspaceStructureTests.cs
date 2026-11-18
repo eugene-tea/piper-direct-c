@@ -80,6 +80,15 @@ internal static class WorkspaceStructureTests
             plugin.CaptureStopProfile("stop.gone", plugin.preferences.Robots!.Single(p => p.Id == "one")) is null,
             "A sidebar STOP did not stop exactly the robot it names");
 
+        // Coming back to the open robot from a bench page is navigation only: it keeps control.
+        plugin.workspace.Commit(WorkspaceNavigation.Initial.Navigate("overview"));
+        plugin.approved = true;
+        await plugin.HandleEventCoreAsync(new("fixture", WorkspaceEventScope.Wrap(plugin.workspace.Epoch, "one", "profiles.select.one"), "click",
+            JsonSerializer.SerializeToElement(true)), CancellationToken.None);
+        Check(plugin.approved && plugin.workspace.Navigation.Page == WorkspacePage.Controls && plugin.preferences.ActiveRobotId == "one",
+            "Returning to the open robot from Overview released its control or did not open its Controls");
+        plugin.approved = false;
+
         var page = All(plugin.FollowPage()).ToArray();
         Check(page.Single(w => w.Id == "group.follow.include.one").Value == 0 && page.Single(w => w.Id == "group.follow.include.two").Value == 1 &&
             page.Single(w => w.Id == "group.follow.ready.one") is { Text: "Not included", Appearance: "muted" } &&

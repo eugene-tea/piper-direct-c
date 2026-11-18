@@ -192,8 +192,11 @@ public sealed partial class PipersPlugin
             Widget.Button(RobotProfileRouting.RobotStopPrefix + p.Id, "Stop") with { Height = 28, Width = 52, Appearance = "danger-quiet",
                 Enabled = StopAvailable(p), Hint = StopHint(p) },
             Widget.Label("profiles.row.pad." + p.Id, "") with { Width = 6 }) with { Spacing = 4 })).ToList();
+        // Adding a robot opens it, which releases the open robot's control: not offered while that
+        // robot is under control or a group is following, so a slip below the list cannot do it.
         robots.Add(Widget.NavItem("profiles.add", "Add robot", "plus", false) with {
-            Enabled = preferences.Robots!.Length < RobotProfileRouting.MaximumProfiles });
+            Enabled = preferences.Robots!.Length < RobotProfileRouting.MaximumProfiles && !approved && !GroupFollowActive,
+            Hint = approved || GroupFollowActive ? "Disable the open robot and stop following before adding another." : null });
         var rows = new List<Widget> { Widget.NavGroup("profiles.heading", "Robots", "robot-arm", !bench) };
         rows.AddRange(robots);
         rows.AddRange([
@@ -216,7 +219,8 @@ public sealed partial class PipersPlugin
 
     /// <summary>A robot with no adapter, or one the arm server reports as absent, has nothing to stop.
     /// A robot that was last seen present keeps its Stop even if feedback has since gone quiet.</summary>
-    private bool StopAvailable(RobotProfile profile) => ProfileStatus(profile) is not ("unassigned" or "offline");
+    /// While a follower group runs, every Stop halts the whole group, so none is ever switched off then.
+    private bool StopAvailable(RobotProfile profile) => GroupFollowActive || ProfileStatus(profile) is not ("unassigned" or "offline");
     private string StopHint(RobotProfile profile) => StopAvailable(profile)
         ? "Stop " + profile.Name + " now. Holding torque can be lost: support the arm."
         : profile.Name + " is not connected, so there is nothing to stop.";
@@ -300,6 +304,7 @@ public sealed partial class PipersPlugin
             var assignment = SceneArmAssignment(profile, settingsRobotOptions);
             patches[assignment.Id] = new() { ["text"] = assignment.Text };
         }
+        patches["profiles.add"] = new() { ["enabled"] = preferences.Robots!.Length < RobotProfileRouting.MaximumProfiles && !approved && !GroupFollowActive };
         string can = ActiveProfile.CanDeviceId;
         patches["profiles.can.status"] = new() { ["text"] = string.IsNullOrEmpty(can) ? "No CAN adapter assigned · scene and robot cameras can still be configured."
             : snapshotSelected() == can ? "Active CAN · " + can : "Assigned CAN inactive or disconnected · " + can };
