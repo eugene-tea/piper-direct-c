@@ -62,7 +62,7 @@ public sealed partial class PipersPlugin
         var rows = preferences.Robots!.Select(p => Widget.Row("overview.row." + p.Id,
             Widget.Label("overview.name." + p.Id, p.Name) with { Width = 130, Height = 28 },
             StatusBadge("overview.dot." + p.Id, ProfileDisplay(p).Tone, Widget.Label("overview.state." + p.Id, ProfileDisplay(p).Word) with { Width = 156, Height = 28 }) with { Width = 172 },
-            Widget.Label("overview.next." + p.Id, OverviewNext(ProfileStatus(p))) with { Height = 28, Appearance = "muted" }) with { Spacing = 8 }).ToArray();
+            Widget.Label("overview.next." + p.Id, OverviewNext(OverviewStatus(p))) with { Height = 28, Appearance = "muted" }) with { Spacing = 8 }).ToArray();
         return Widget.Column("overview",
             Widget.Column("overview.robots", [Widget.Row("overview.columns",
                 Widget.Label("overview.columns.robot", "ROBOT") with { Width = 130, Appearance = "muted" },
@@ -81,6 +81,7 @@ public sealed partial class PipersPlugin
     private static string OverviewNext(string status) => status switch
     {
         "unassigned" => "Open it and assign its arm connection in Setup.",
+        "no feedback" => "Start the arm server on the Arm server page.",
         "offline" => "Check its power and USB-CAN cable, and that the arm server is running.",
         "Needs recovery" => "Open it and follow the recovery steps.",
         "In follower group" => "Following the simulation.",

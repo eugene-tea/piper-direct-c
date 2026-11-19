@@ -90,6 +90,10 @@ internal static class WorkspaceStructureTests
             "Disable asked a question while a movement or a follow run was in progress");
         Check(!PipersPlugin.DisableDropsIdleArm(armed, null, false) && !PipersPlugin.DisableDropsIdleArm(new RobotProfile("q", "Q"), Bench(true, false), false),
             "Disable was held back without fresh state or without an adapter");
+        // Feedback of an unexpected shape must not throw on the Disable click: that would lose the click.
+        var odd = Bench(true, false); odd["devices"]![0]!["joints"]![0]!["enabled"] = 1;
+        Check(!PipersPlugin.DisableDropsIdleArm(armed, odd, false) && !PipersPlugin.DisableDropsIdleArm(armed, new JsonObject { ["devices"] = "none" }, false),
+            "Unreadable feedback held Disable back instead of letting it through");
 
         // Coming back to the open robot from a bench page is navigation only: it keeps control.
         plugin.workspace.Commit(WorkspaceNavigation.Initial.Navigate("overview"));
@@ -120,5 +124,138 @@ internal static class WorkspaceStructureTests
         var overview = All(plugin.OverviewPage()).ToArray();
         Check(new[] { "one", "two" }.All(id => overview.Count(w => w.Id == "overview.state." + id) == 1 && overview.Count(w => w.Id == "overview.next." + id) == 1),
             "The overview did not show one row per robot");
+    }
+
+    // The Disable question: asked for an idle powered arm, answered only on the robot it was asked
+    // about, and sent to the arm only after "Arm supported — disable".
+    public static async Task RunDisableQuestion()
+    {
+        const string backend = "fake-backend-session";
+        var plugin = new PipersPlugin();
+        var rpc = new EmergencyStopTests.FakeCalls();
+        plugin.client = new LuckyRobots.Piper.Grpc.PiperControl.PiperControlClient(rpc);
+        plugin.preferences = RobotProfileRouting.Normalize(new Preferences(Robots:
+            [new("one", "Piper 1", "can-one"), new("two", "Piper 2", "can-two")], ActiveRobotId: "one"));
+        plugin.telemetry.AdoptBackend(backend);
+        var snapshot = Fixtures.Snapshot(backend, Fixtures.Arm("can-one", generation: 1));
+        snapshot["any_motion_active"] = false;
+        long sequence = 0;
+        // Feedback is fresh for half a second; each step that needs it publishes a new receipt.
+        void Feedback()
+        {
+            plugin.telemetry.PublishState(snapshot);
+            plugin.telemetry.Publish(new(snapshot, backend, ++sequence, System.Diagnostics.Stopwatch.GetTimestamp(), 0));
+        }
+        Feedback();
+        string folder = Path.Combine(Path.GetTempPath(), "piper-disable-question-" + Guid.NewGuid().ToString("N"));
+        // What the editor was last told about the question's panel, from full views and patches alike.
+        bool? shown = null;
+        void Watch(JsonNode? node)
+        {
+            if (node is JsonArray array) { foreach (var child in array) Watch(child); return; }
+            if (node is not JsonObject item) return;
+            if (item["id"] is JsonValue id && id.TryGetValue(out string? name) && name.EndsWith(".disable.confirm", StringComparison.Ordinal))
+                shown = item["visible"]?.GetValue<bool>() ?? true;
+            foreach (var (key, value) in item)
+            {
+                if (key.EndsWith(".disable.confirm", StringComparison.Ordinal) && value?["visible"] is JsonValue visible) shown = visible.GetValue<bool>();
+                else Watch(value);
+            }
+        }
+        plugin.engine = Fixtures.Context(new PluginStart("fixture", folder, folder),
+            (sent, _) => { Watch(JsonSerializer.SerializeToNode(sent, PluginProtocol.Json)); return Task.CompletedTask; },
+            (_, _, _) => Task.FromResult(JsonSerializer.SerializeToElement(new { applied = false })));
+        int queued = 0;
+        var dispatch = new UiEventDispatch((input, cancellation) => { Interlocked.Increment(ref queued); return plugin.HandleEventCoreAsync(input, cancellation); },
+            () => plugin.ControlInputEpoch, _ => { });
+        plugin.shell.Open(dispatch);
+        try
+        {
+            await plugin.Render(CancellationToken.None);
+            Task Click(string wire) => plugin.HandleEventAsync(new("fixture", wire, "click", JsonSerializer.SerializeToElement(true)), CancellationToken.None);
+            string Answer(string answer) => WorkspaceEventScope.Wrap(plugin.workspace.Epoch, plugin.preferences.ActiveRobotId, "disable.confirm." + answer);
+            bool Shown() => shown == true;
+            Check(shown == false, "The Disable question was not part of the published page, or was open before anyone asked");
+
+            await Click("robot.one.disable");
+            Check(plugin.DisableQuestionOpen && Shown() && rpc.Routes.IsEmpty && Volatile.Read(ref queued) == 0,
+                "Disable on an idle powered arm did not ask first, or reached the arm before the answer");
+            await Click(Answer("cancel"));
+            Check(!plugin.DisableQuestionOpen && !Shown() && rpc.Routes.IsEmpty && Volatile.Read(ref queued) == 0, "Cancel did not withdraw the Disable question, or sent something");
+            await Click(Answer("accept"));
+            Check(rpc.Routes.IsEmpty && Volatile.Read(ref queued) == 0, "An answer with no question open disabled the arm");
+
+            // Asked about robot one; robot two is then opened. The answer given there belongs to nobody.
+            await Click("robot.one.disable");
+            var asked = plugin.preferences;
+            plugin.preferences = RobotProfileRouting.Activate(asked, "two");
+            await plugin.Render(CancellationToken.None);
+            plugin.approved = true; plugin.message = "";
+            Check(!plugin.DisableQuestionOpen && !Shown(), "A Disable question asked about one robot was shown on another robot's page");
+            await Click(Answer("accept"));
+            Check(rpc.Routes.IsEmpty && Volatile.Read(ref queued) == 0 && plugin.approved && !plugin.message.StartsWith("Disable requested", StringComparison.Ordinal),
+                "An answer on another robot's page announced a Disable, or withdrew that robot's control: " + plugin.message);
+            plugin.approved = false;
+            plugin.preferences = RobotProfileRouting.Activate(plugin.preferences, "one");
+            await plugin.Render(CancellationToken.None);
+            Check(!plugin.DisableQuestionOpen && !Shown(), "A Disable question came back when its robot was opened again");
+
+            // Asked and accepted on the same robot: exactly one disable command for that arm.
+            Feedback();
+            await Click("robot.one.disable");
+            Check(plugin.DisableQuestionOpen && rpc.Routes.IsEmpty, "Disable did not ask again after an abandoned question");
+            Feedback();
+            await Click(Answer("accept"));
+            await Eventually(() => rpc.Routes.Contains("/api/command"), "Arm supported — disable did not send the disable command");
+            var body = JsonNode.Parse(rpc.RequestBodies.Single())!;
+            Check(!plugin.DisableQuestionOpen && body["action"]?.GetValue<string>() == "disable" && body["device_id"]?.GetValue<string>() == "can-one",
+                "The confirmed Disable was not sent for the robot that was asked about: " + body.ToJsonString());
+
+            // The question names its robot, and STOP on that robot withdraws it: a stopped arm is not asked about.
+            Check(plugin.DisableQuestionText.StartsWith("Piper 1: ", StringComparison.Ordinal), "The Disable question did not name its robot: " + plugin.DisableQuestionText);
+            Feedback();
+            await Click("robot.one.disable");
+            Check(plugin.DisableQuestionOpen && Shown(), "Disable did not ask before the STOP check");
+            await Click("robot.one.stop");
+            Check(!plugin.DisableQuestionOpen, "STOP left the Disable question open for the stopped robot");
+        }
+        finally
+        {
+            await dispatch.DisposeAsync();
+            if (Directory.Exists(folder)) Directory.Delete(folder, true);
+        }
+    }
+
+    public static void RunProfileDisplay()
+    {
+        var plugin = new PipersPlugin();
+        var profiles = new[] { "unset", "absent", "stopped", "guided", "holding", "partly", "limp" }
+            .Select(id => new RobotProfile(id, id, id == "unset" ? "" : "can-" + id)).ToArray();
+        plugin.preferences = RobotProfileRouting.Normalize(new Preferences { Robots = profiles, ActiveRobotId = "unset" });
+        JsonObject Arm(string id, bool enabled, Action<JsonObject>? change = null)
+        { var arm = Fixtures.Arm("can-" + id, enabled: enabled); change?.Invoke(arm); return arm; }
+        var state = Fixtures.Snapshot("backend", Arm("holding", true));
+        var devices = state["devices"]!.AsArray();
+        devices.Add(Arm("stopped", true, arm => arm["recovery_required"] = true));
+        devices.Add(Arm("guided", true, arm => arm["status"]!["control"] = 2));
+        devices.Add(Arm("partly", true, arm => arm["joints"]![2]!["enabled"] = false));
+        devices.Add(Arm("limp", false));
+        devices.Add(Arm("absent", true, arm => arm["present"] = false));
+        plugin.telemetry.PublishState(state);
+        (string, string) Shown(string id) => plugin.ProfileDisplay(plugin.preferences.Robots!.Single(p => p.Id == id));
+        // The arm server has said nothing recently: what was last heard is not shown as the robot's state.
+        Check(profiles.Skip(1).All(p => Shown(p.Id) == ("No feedback", "muted")) && Shown("unset") == ("Not set up", "muted"),
+            "A robot kept its last known state on screen with no arm server answering");
+        Check(All(plugin.OverviewPage()).Single(w => w.Id == "overview.next.holding").Text!.Contains("Start the arm server", StringComparison.Ordinal) &&
+            All(plugin.OverviewPage()).Single(w => w.Id == "overview.next.unset").Text!.Contains("Setup", StringComparison.Ordinal),
+            "The overview did not point a silent robot at the arm server, or stopped pointing an unassigned one at Setup");
+        plugin.telemetry.AdoptBackend("backend");
+        plugin.telemetry.Publish(new(state, "backend", 1, System.Diagnostics.Stopwatch.GetTimestamp(), 0));
+        Check(Shown("unset") == ("Not set up", "muted") && Shown("absent") == ("Offline", "muted"), "A robot that is not there was not shown grey, or not named as such");
+        Check(Shown("stopped") == ("Stopped", "danger"), "A robot that needs recovery was not shown red as Stopped");
+        Check(Shown("guided") == ("Hand guiding", "warning"), "An arm on its own teach button was not shown as Hand guiding");
+        // Green is kept for a robot with nothing left to do; a powered arm this session has not connected to is amber.
+        Check(Shown("holding") == ("Motors on", "warning") && Shown("limp") == ("Disabled", "warning") && Shown("partly") == ("Disabled", "warning"),
+            "A powered or unpowered robot that is not open was given the wrong word or colour");
     }
 }

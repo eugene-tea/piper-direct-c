@@ -234,9 +234,13 @@ public sealed partial class PipersPlugin
     internal (string Word, string Tone) ProfileDisplay(RobotProfile profile)
     {
         string status = ProfileStatus(profile);
+        bool open = openRobotStatus is { } header && header.Profile == profile.Id && profile.Id == ActiveProfile.Id;
+        // With the arm server silent, what was last heard about a robot is history, not its state. The open
+        // robot is the exception: its header already says it is waiting, and its row repeats the header.
+        if (NoFeedback(profile) && !(open && status == "connected")) return ("No feedback", "muted");
         if (status != "connected") return (status switch { "Needs recovery" => "Stopped", "In follower group" => "Following", _ => StatusText(status) }, StatusTone(status));
         // The open robot's row repeats its page header, word and colour, so the two can never disagree.
-        if (openRobotStatus is { } open && open.Profile == profile.Id && profile.Id == ActiveProfile.Id) return (open.Word, open.Tone);
+        if (open) return (openRobotStatus!.Value.Word, openRobotStatus.Value.Tone);
         var device = state?["devices"]?.AsArray().FirstOrDefault(d => d?["id"]?.GetValue<string>() == profile.CanDeviceId);
         // Control mode 2 is the arm's own teach button: the hand moves it, software does not.
         if (device?["status"]?["control"]?.GetValue<int>() == 2) return ("Hand guiding", "warning");
@@ -245,6 +249,11 @@ public sealed partial class PipersPlugin
         // page will ask for when opened. Green is kept for a robot with nothing left to do.
         return (powered ? "Motors on" : "Disabled", "warning");
     }
+
+    /// <summary>An assigned robot while the arm server is not answering. Only for what is displayed:
+    /// <see cref="StopAvailable"/> deliberately keeps Stop for a robot that was last seen present.</summary>
+    private bool NoFeedback(RobotProfile profile) => profile.CanDeviceId.Length > 0 && !ServerLive;
+    private string OverviewStatus(RobotProfile profile) => NoFeedback(profile) ? "no feedback" : ProfileStatus(profile);
 
     /// <summary>What the open robot's page header last showed; null until a header has been drawn.</summary>
     private (string Profile, string Word, string Tone)? openRobotStatus;
@@ -317,13 +326,12 @@ public sealed partial class PipersPlugin
     {
         foreach (var profile in preferences.Robots!)
         {
-            string status = ProfileStatus(profile);
             var display = ProfileDisplay(profile);
             patches["profiles.select." + profile.Id] = new() { ["text"] = ProfileLabel(profile), ["enabled"] = true, ["appearance"] = display.Tone };
             patches[RobotProfileRouting.RobotStopPrefix + profile.Id] = new() { ["enabled"] = StopAvailable(profile), ["hint"] = StopHint(profile) };
             patches["overview.dot." + profile.Id] = new() { ["appearance"] = display.Tone };
             patches["overview.state." + profile.Id] = new() { ["text"] = display.Word };
-            patches["overview.next." + profile.Id] = new() { ["text"] = OverviewNext(status) };
+            patches["overview.next." + profile.Id] = new() { ["text"] = OverviewNext(OverviewStatus(profile)) };
             var assignment = SceneArmAssignment(profile, settingsRobotOptions);
             patches[assignment.Id] = new() { ["text"] = assignment.Text };
         }
@@ -394,6 +402,9 @@ public sealed partial class PipersPlugin
             throw new InvalidOperationException("Stop grouped following before changing a robot assignment.");
         if (LensWorkerBusy) throw new InvalidOperationException("Finish camera setup/calibration before switching robots.");
         switchingProfile = true;
+        // A Disable question belongs to the robot it was asked about; it does not follow the operator
+        // to another robot, nor wait to reappear when this one is opened again.
+        pendingDisable = null;
         try
         {
             // Each step is traced: a switch that never returns leaves every later click unanswered, and the
@@ -425,7 +436,8 @@ public sealed partial class PipersPlugin
             await Save(cancellation);
             System.Diagnostics.Trace.TraceInformation("Robot switch: {0}", "selecting the adapter");
             string? selectionError = null;
-            // With no arm server answering there is nobody to ask; the adapter is selected when feedback returns.
+            // With no arm server answering there is nobody to ask. Nothing selects the adapter later by
+            // itself: once feedback returns, clicking this robot again does (see the "elsewhere" rule).
             if (profile.CanDeviceId.Length > 0 && !ServerLive) selectionError = "the arm server is not running";
             else if (profile.CanDeviceId.Length > 0 && state?["selected"]?.GetValue<string>() != profile.CanDeviceId)
             {

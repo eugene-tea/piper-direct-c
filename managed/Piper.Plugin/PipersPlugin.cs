@@ -208,7 +208,9 @@ public sealed partial class PipersPlugin : ILuckyPlugin
 
     public async Task HandleEventAsync(UiEvent input, CancellationToken cancellation)
     {
-        Trace.TraceInformation("Click received: {0}", input.WidgetId);
+        // Streams (a slider drag, simulation targets) carry a value on every frame; only presses are traced.
+        if (!input.WidgetId.StartsWith("engine.", StringComparison.Ordinal) && input.Value.ValueKind is not System.Text.Json.JsonValueKind.Number)
+            Trace.TraceInformation("Click received: {0}", input.WidgetId);
         long inputEpoch = ControlInputEpoch;
         var eventProfile = ActiveProfile;
         string eventBackend = token;
@@ -231,15 +233,17 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         // STOP never asks, and neither does Disable while something is running: that is not the moment for a question.
         if (eventId == "disable" && shell.Events is not null && DisableDropsIdleArm(eventProfile, state, GroupFollowActive))
         {
-            pendingDisable = input;
+            pendingDisable = new(input, eventProfile.Id);
             await PresentDisableConfirmation();
             return;
         }
         if (eventId is "disable.confirm.accept" or "disable.confirm.cancel")
         {
             var pending = pendingDisable; pendingDisable = null;
-            if (eventId == "disable.confirm.cancel" || pending is null) { await PresentDisableConfirmation(); return; }
-            input = pending; eventId = "disable";
+            // The answer counts only for the robot that was asked about. A question left open for
+            // another robot would otherwise announce a Disable here that reaches no arm.
+            if (eventId == "disable.confirm.cancel" || pending is null || pending.ProfileId != eventProfile.Id) { await PresentDisableConfirmation(); return; }
+            input = pending.Click; eventId = "disable";
         }
         if (eventId == "disable" && shell.Events is { } urgentDispatch)
         {
@@ -271,16 +275,32 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         await HandleEventCoreAsync(input, cancellation);
     }
 
-    /// <summary>The Disable click waiting for "Arm supported — disable"; null when no question is shown.</summary>
-    private UiEvent? pendingDisable;
+    /// <summary>A Disable click waiting for "Arm supported — disable", and the robot it was made for.
+    /// An immutable reference: the telemetry loop reads it while the event reader replaces it.</summary>
+    private sealed record PendingDisable(UiEvent Click, string ProfileId);
+    private volatile PendingDisable? pendingDisable;
+
+    /// <summary>Whether the Disable question is open for the robot on screen. A question asked about
+    /// one robot is never shown, or answered, on another robot's page.</summary>
+    /// <summary>Names the robot: the question can be read from a page that is not that robot's own.</summary>
+    internal string DisableQuestionText => ActiveProfile.Name + ": motors switch off now. The arm has no brakes and will drop unless it is supported.";
+
+    internal bool DisableQuestionOpen => pendingDisable is { } pending && pending.ProfileId == ActiveProfile.Id;
 
     /// <summary>Whether Disable would let a resting, powered arm fall: this robot's motors are on and
-    /// nothing is moving it. With no fresh state the answer is no, so Disable is never held back blind.</summary>
+    /// nothing is moving it. With no state, or state that cannot be read, the answer is no, so
+    /// Disable is never held back blind.</summary>
     internal static bool DisableDropsIdleArm(RobotProfile profile, JsonObject? state, bool following)
     {
-        if (following || profile.CanDeviceId.Length == 0 || state?["any_motion_active"]?.GetValue<bool>() == true) return false;
-        var device = state?["devices"]?.AsArray().FirstOrDefault(d => d?["id"]?.GetValue<string>() == profile.CanDeviceId);
-        return device?["joints"] is JsonArray joints && joints.Any(joint => joint?["enabled"]?.GetValue<bool>() == true);
+        if (following || profile.CanDeviceId.Length == 0) return false;
+        try
+        {
+            if (state?["any_motion_active"]?.GetValue<bool>() == true) return false;
+            var device = state?["devices"]?.AsArray().FirstOrDefault(d => d?["id"]?.GetValue<string>() == profile.CanDeviceId);
+            return device?["joints"] is JsonArray joints && joints.Any(joint => joint?["enabled"]?.GetValue<bool>() == true);
+        }
+        // Unexpected feedback must not stand between the operator and Disable.
+        catch (Exception error) when (error is InvalidOperationException or FormatException) { return false; }
     }
 
     private async Task PresentDisableConfirmation()
@@ -664,7 +684,8 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         {
             ["link"] = new() { ["text"] = link is null ? "Link robot" : "Unlink robot" }
         };
-        patches["disable.confirm"] = new() { ["visible"] = pendingDisable is not null };
+        patches["disable.confirm"] = new() { ["visible"] = DisableQuestionOpen };
+        patches["disable.confirm.text"] = new() { ["text"] = DisableQuestionText };
         patches["safety"] = new() { ["visible"] = scope.View?.Confirmation is { } presented &&
             ReferenceEquals(CommandAuthority.Current.Confirmation, presented) };
         AddResetCompletionPatches(patches);

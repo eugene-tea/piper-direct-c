@@ -189,7 +189,9 @@ public sealed class OrderedSimulationExecution
         Path.Drained && CompletedCursor == Path.LastCursor && OrderedSimulationPath.PhaseKind(Path.LastSource?.Phase ?? "") == "finish" &&
         completedHomeCursor > 0 && completedHomeEpisode == Path.LastSource?.EpisodeId &&
         hardware.FeedbackFresh && hardware.GripperFresh && armStationary && double.IsFinite(gripperSpeed) && Math.Abs(gripperSpeed) <= PikaProtocol.StationarySpeedRadiansPerSecond &&
-        Target.JointDegrees.All(q => Math.Abs(q) <= .25) && hardware.JointDegrees.All(q => Math.Abs(q) <= .25) &&
+        Target.JointDegrees.All(q => Math.Abs(q) <= .25) &&
+        // Measured home gets the same per-joint allowance as any phase endpoint: a roll joint leaves a small target unexecuted.
+        hardware.JointDegrees.Select((q, joint) => Math.Abs(q) <= SimulationFollowPolicy.ArrivalJointToleranceDegrees(joint)).All(within => within) &&
         completedOpeningCommand is { } opened && lastClosingCommand is { } closed && opened > closed && Target.OpeningMm == opened &&
         jaw.Resolved && jaw.Opening == opened && Math.Abs(hardware.GripperOpeningMm - opened) <= 2;
 

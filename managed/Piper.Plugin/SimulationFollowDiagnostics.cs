@@ -57,7 +57,7 @@ public sealed record SimulationFollowFailureOrdered(string EpisodeId, long Episo
             $"Pika {F(ActualOpeningMm)} mm; expected {F(ExpectedOpeningMm)} ±{F(OpeningToleranceMm)} mm " +
             $"(command {F(EndpointCommandOpeningMm)} mm)" +
             (RequiresPhysicalContactCandidate ? $"; physical contact candidate {(ActualPhysicalContactCandidate ? "present" : "missing")}" : "") +
-            $"; largest arm endpoint error J{joint + 1} {F(EndpointJointErrorsDegrees[joint], "F2")}° (allowed {F(SimulationFollowPolicy.ArrivalJointToleranceDegrees(joint), "F2")}°)" +
+            $"; arm endpoint error furthest past its allowance J{joint + 1} {F(EndpointJointErrorsDegrees[joint], "F2")}° (allowed {F(SimulationFollowPolicy.ArrivalJointToleranceDegrees(joint), "F2")}°)" +
             $"; arm stationary {(ArmStationary ? "yes" : "no")}; elapsed {F(ElapsedSeconds, "F2")}/{F(DurationSeconds, "F2")} s.";
     }
 }
