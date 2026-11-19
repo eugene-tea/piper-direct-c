@@ -11,6 +11,12 @@ public sealed partial class PipersPlugin
         { Width = 210, Icon = "crosshair", Hint = "Opens this robot's guided mounting calibration. It never moves the arm." };
 
     /// <summary>A small capital heading, like the section titles of the editor's own panels.</summary>
+    /// <summary>A question the operator must answer before something happens: the sentence on its own
+    /// line and the answers beneath it. Side by side, a long sentence pushes the buttons past the
+    /// edge of a narrow panel, where the one that matters cannot be seen.</summary>
+    internal static Widget Confirmation(string id, Widget text, params Widget[] answers) =>
+        Widget.Column(id, text, Widget.Row(id + ".answers", answers)) with { Padding = 12, Spacing = 8, Appearance = "panel" };
+
     /// <summary>A coloured status dot joined to its text, so the pair reads as one thing.
     /// Patch the dot's appearance by <paramref name="dotId"/> and the text by its own id.</summary>
     internal static Widget StatusBadge(string dotId, string tone, Widget text) => Widget.Row(dotId + "@badge",

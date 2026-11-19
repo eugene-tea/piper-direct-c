@@ -23,9 +23,8 @@ public sealed partial class PipersPlugin
                 StatusBadge("workspace.connection.dot", "muted", Widget.Label("workspace.connection", "Connecting…") with { Height = 30 })),
                 Widget.Label("workspace.next", "") with { Visible = false, Hint = "The one thing to do next for this robot." },
                 Widget.Row("header.actions", Widget.Button("enable", "Enable robot") with { Appearance = "primary" },
-                    Widget.Button("disable", "Disable") with { Width = 76, Hint = "Support the arm before releasing holding torque." },
-                    // Power on, power off and stop are one group, for the robot this page is about.
-                    Widget.Button("stop", "Stop") with { Width = 64, Appearance = "danger-quiet", Enabled = StopAvailable(ActiveProfile), Hint = StopHint(ActiveProfile) }) with { Visible = Navigation.Page == WorkspacePage.Controls }) with { Visible = !bench },
+                    // Stop is not repeated here: every robot has its own in the sidebar, on every page.
+                    Widget.Button("disable", "Disable") with { Width = 76, Hint = "Support the arm before releasing holding torque." }) with { Visible = Navigation.Page == WorkspacePage.Controls }) with { Visible = !bench },
             Widget.Label("workspace.primary-action", "") with { Height = 48, Visible = false },
             Widget.Label("workspace.action-error", "") with { Height = 64, Visible = false, Appearance = "danger" },
             Widget.Label("workspace.page-title", BenchPageTitle()) with { Appearance = "heading", Visible = bench }) with { Padding = 18, Spacing = 12 },
@@ -33,8 +32,11 @@ public sealed partial class PipersPlugin
             Widget.Tabs("workspace.pages", WorkspaceTabs.RobotTabs, WorkspaceTabs.PageIndex(Navigation)) with { Icons = ["", "", "", "gear"], Visible = !bench })
             with { Spacing = 0, Appearance = bench ? null : "sidebar" };
         var page = Widget.Column("workspace.page",
-            Widget.Row("safety", Widget.Label("safety.text", "Make sure it is safe to move the robot."),
-                Widget.Button("safety.accept", "Enable robot") with { Appearance = "primary" }, Widget.Button("safety.cancel", "Cancel")) with { Visible = showClearanceConfirmation, Padding = 12, Appearance = "panel" },
+            Confirmation("safety", Widget.Label("safety.text", "Make sure it is safe to move the robot."),
+                Widget.Button("safety.accept", "Enable robot") with { Appearance = "primary" }, Widget.Button("safety.cancel", "Cancel")) with { Visible = showClearanceConfirmation },
+            Confirmation("disable.confirm", Widget.Label("disable.confirm.text", "Motors switch off now. The arm has no brakes and will drop unless it is supported."),
+                Widget.Button("disable.confirm.accept", "Arm supported — disable") with { Appearance = "danger" },
+                Widget.Button("disable.confirm.cancel", "Cancel")) with { Visible = pendingDisable is not null },
             ResetCompletionConfirmation(),
             Widget.Column("workspace.incident", Widget.Label("incident.heading", "RECOVERY") with { Appearance = "muted" },
                 Widget.Label("incident", ""),

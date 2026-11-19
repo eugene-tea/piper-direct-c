@@ -54,7 +54,12 @@ public sealed record RobotReadiness(string Label, string Action, bool Enabled, s
             }
             return Step("Controller needs attention", "Controls unavailable", blocker);
         }
-        if (needsConnection) return Step(power.AllEnabled ? "Enabled · finish connection" : "Disabled", "Enable robot", "One action connects the assigned arm and gripper and restores holding control.", RobotPrimaryAction.Enable);
+        if (needsConnection) return Step(
+            // "Enabled" here read as done while the Enable robot button still waited: the motors are on, but this
+            // panel has not connected to the arm and its gripper. The one action keeps its one name.
+            power.AllEnabled ? "Motors on · not connected" : "Disabled", "Enable robot", power.AllEnabled
+                ? "The arm is holding by itself. Enable robot connects this panel to it and to its gripper."
+                : "One action connects the assigned arm and gripper and restores holding control.", RobotPrimaryAction.Enable);
         return Step("Ready · arm and gripper enabled", "Enabled", "Open Bench → Follow simulation, tick Include for this robot, then press Follow simulation.");
     }
 }

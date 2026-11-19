@@ -80,6 +80,17 @@ internal static class WorkspaceStructureTests
             plugin.CaptureStopProfile("stop.gone", plugin.preferences.Robots!.Single(p => p.Id == "one")) is null,
             "A sidebar STOP did not stop exactly the robot it names");
 
+        // Disable asks first only where it would let a resting, powered arm fall.
+        var armed = new RobotProfile("p", "P", "can-p");
+        JsonObject Bench(bool power, bool moving) => new() { ["any_motion_active"] = moving, ["devices"] = new JsonArray(new JsonObject {
+            ["id"] = "can-p", ["joints"] = new JsonArray(new JsonObject { ["enabled"] = power }, new JsonObject { ["enabled"] = false }) }) };
+        Check(PipersPlugin.DisableDropsIdleArm(armed, Bench(true, false), false), "Disable did not ask before dropping an idle powered arm");
+        Check(!PipersPlugin.DisableDropsIdleArm(armed, Bench(false, false), false), "Disable asked although every motor was already off");
+        Check(!PipersPlugin.DisableDropsIdleArm(armed, Bench(true, true), false) && !PipersPlugin.DisableDropsIdleArm(armed, Bench(true, false), true),
+            "Disable asked a question while a movement or a follow run was in progress");
+        Check(!PipersPlugin.DisableDropsIdleArm(armed, null, false) && !PipersPlugin.DisableDropsIdleArm(new RobotProfile("q", "Q"), Bench(true, false), false),
+            "Disable was held back without fresh state or without an adapter");
+
         // Coming back to the open robot from a bench page is navigation only: it keeps control.
         plugin.workspace.Commit(WorkspaceNavigation.Initial.Navigate("overview"));
         plugin.approved = true;

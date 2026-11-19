@@ -128,8 +128,14 @@ public sealed partial class PipersPlugin : ILuckyPlugin
     {
         string authorization = expectedToken ?? token;
         if (expectedToken is not null && token != expectedToken) throw new InvalidOperationException("The controller session changed; no command was sent under the old confirmation.");
-        var reply = await client.ExecuteAsync(new ControlRequest { Route = request.Route.Path, Json = request.Json },
-            new Metadata { { "x-piper-token", authorization } }, deadline: DateTime.UtcNow.AddSeconds(request.Route == PiperApi.PikaConnect ? 20 : 3), cancellationToken: cancellation);
+        double seconds = request.Route == PiperApi.PikaConnect ? 20 : 3;
+        using var call = client.ExecuteAsync(new ControlRequest { Route = request.Route.Path, Json = request.Json },
+            new Metadata { { "x-piper-token", authorization ?? "" } }, deadline: DateTime.UtcNow.AddSeconds(seconds), cancellationToken: cancellation);
+        ControlReply reply;
+        // The call's own deadline is not trusted to end it: with no arm server listening it has been seen
+        // to stay pending, and one request that never returns leaves every later click unanswered.
+        try { reply = await call.ResponseAsync.WaitAsync(TimeSpan.FromSeconds(seconds + 1), cancellation); }
+        catch (TimeoutException) { throw new RpcException(new Status(StatusCode.Unavailable, "The arm server did not answer.")); }
         var result = JsonNode.Parse(reply.Json)!.AsObject();
         if (reply.Status >= 400)
         {
@@ -221,8 +227,23 @@ public sealed partial class PipersPlugin : ILuckyPlugin
             catch (Exception error) { Trace.TraceWarning("Recovery cancellation presentation: {0}", error.Message); }
             return;
         }
+        // Disable switches the motors off and these arms have no brakes, so an idle powered arm asks first.
+        // STOP never asks, and neither does Disable while something is running: that is not the moment for a question.
+        if (eventId == "disable" && shell.Events is not null && DisableDropsIdleArm(eventProfile, state, GroupFollowActive))
+        {
+            pendingDisable = input;
+            await PresentDisableConfirmation();
+            return;
+        }
+        if (eventId is "disable.confirm.accept" or "disable.confirm.cancel")
+        {
+            var pending = pendingDisable; pendingDisable = null;
+            if (eventId == "disable.confirm.cancel" || pending is null) { await PresentDisableConfirmation(); return; }
+            input = pending; eventId = "disable";
+        }
         if (eventId == "disable" && shell.Events is { } urgentDispatch)
         {
+            pendingDisable = null;
             follow.CancelInput("Disable requested · stopping the follower group");
             DisarmTelemetryTargets("Disable requested; previous actions discarded", clearLink: false, forgetApproval: eventProfile.Id);
             CancelHandGuideRecovery();
@@ -248,6 +269,25 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         }
         // Unstarted isolated fixtures use the same handler without a worker.
         await HandleEventCoreAsync(input, cancellation);
+    }
+
+    /// <summary>The Disable click waiting for "Arm supported — disable"; null when no question is shown.</summary>
+    private UiEvent? pendingDisable;
+
+    /// <summary>Whether Disable would let a resting, powered arm fall: this robot's motors are on and
+    /// nothing is moving it. With no fresh state the answer is no, so Disable is never held back blind.</summary>
+    internal static bool DisableDropsIdleArm(RobotProfile profile, JsonObject? state, bool following)
+    {
+        if (following || profile.CanDeviceId.Length == 0 || state?["any_motion_active"]?.GetValue<bool>() == true) return false;
+        var device = state?["devices"]?.AsArray().FirstOrDefault(d => d?["id"]?.GetValue<string>() == profile.CanDeviceId);
+        return device?["joints"] is JsonArray joints && joints.Any(joint => joint?["enabled"]?.GetValue<bool>() == true);
+    }
+
+    private async Task PresentDisableConfirmation()
+    {
+        using var presentation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        try { await Update(presentation.Token); }
+        catch (Exception error) { Trace.TraceWarning("Disable confirmation presentation: {0}", error.Message); }
     }
 
     internal static bool ControlEventNeedsPermission(string id)
@@ -624,6 +664,7 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         {
             ["link"] = new() { ["text"] = link is null ? "Link robot" : "Unlink robot" }
         };
+        patches["disable.confirm"] = new() { ["visible"] = pendingDisable is not null };
         patches["safety"] = new() { ["visible"] = scope.View?.Confirmation is { } presented &&
             ReferenceEquals(CommandAuthority.Current.Confirmation, presented) };
         AddResetCompletionPatches(patches);
