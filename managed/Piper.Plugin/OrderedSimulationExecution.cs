@@ -110,7 +110,8 @@ public sealed class OrderedSimulationExecution
         // Opening resolves to its command; neither aperture check proves a grasp.
         bool unconfirmedClose = ClosingContact(phase) && UnconfirmedOpening(hardware.GripperOpeningMm, phase.End.CommandOpeningMm);
         bool arrived = !QualifyingLostContact && ElapsedSeconds >= phase.DurationSeconds && armStationary &&
-            Target.JointDegrees.Zip(hardware.JointDegrees, (target, actual) => Math.Abs(target - actual)).All(error => error <= .25) &&
+            Target.JointDegrees.Zip(hardware.JointDegrees, (target, actual) => Math.Abs(target - actual))
+                .Select((error, joint) => error <= SimulationFollowPolicy.ArrivalJointToleranceDegrees(joint)).All(within => within) &&
             Math.Abs(gripperSpeed) <= PikaProtocol.StationarySpeedRadiansPerSecond && (unconfirmedClose ||
                 Math.Abs(hardware.GripperOpeningMm - expected) <= OpeningArrivalToleranceMm &&
                 (!RequiresPhysicalContactCandidate || hardware.GripperOpeningMm - phase.End.CommandOpeningMm > 2));
