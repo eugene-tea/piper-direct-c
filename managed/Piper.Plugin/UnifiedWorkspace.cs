@@ -223,6 +223,10 @@ public sealed partial class PipersPlugin
             : readiness.NextAction is RobotPrimaryAction.OpenRecovery or RobotPrimaryAction.OpenStoppedRecovery || readiness.Label == "Controller needs attention" ? "danger"
             : readiness.NextAction != RobotPrimaryAction.None ? "warning" : "muted";
         patches["workspace.connection.dot"] = new() { ["appearance"] = tone };
+        // The sidebar row of this robot says the same thing in the same colour as this header.
+        string headline = groupParticipant ? "Following" : readiness.Label;
+        int cut = headline.IndexOf(" · ", StringComparison.Ordinal);
+        openRobotStatus = (ActiveProfile.Id, cut > 0 ? headline[..cut] : headline, tone);
         patches["stop"] = new() { ["enabled"] = StopAvailable(ActiveProfile), ["hint"] = StopHint(ActiveProfile) };
         // One line that always answers "what do I do now?". The full reasoning stays in its tooltip.
         bool recovering = RecoveryPanelVisible(device);

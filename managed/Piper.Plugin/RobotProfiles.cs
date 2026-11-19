@@ -188,7 +188,7 @@ public sealed partial class PipersPlugin
         var robots = preferences.Robots!.Select(p => (Widget)(Widget.Row("profiles.row." + p.Id,
             // No tooltip on a plain row: it would cover the robot below it.
             Widget.NavItem("profiles.select." + p.Id, ProfileLabel(p), "robot-arm", !bench && p.Id == ActiveProfile.Id) with
-                { Appearance = StatusTone(ProfileStatus(p)), Hint = p.CanDeviceId.Length == 0 ? "Assign an adapter in this robot's Setup tab" : null },
+                { Appearance = ProfileDisplay(p).Tone, Hint = p.CanDeviceId.Length == 0 ? "Assign an adapter in this robot's Setup tab" : null },
             Widget.Button(RobotProfileRouting.RobotStopPrefix + p.Id, "Stop") with { Height = 28, Width = 52, Appearance = "danger-quiet",
                 Enabled = StopAvailable(p), Hint = StopHint(p) },
             Widget.Label("profiles.row.pad." + p.Id, "") with { Width = 6 }) with { Spacing = 4 })).ToList();
@@ -225,7 +225,29 @@ public sealed partial class PipersPlugin
         ? "Stop " + profile.Name + " now. Holding torque can be lost: support the arm."
         : profile.Name + " is not connected, so there is nothing to stop.";
 
-    private string ProfileLabel(RobotProfile profile) => profile.Name + "\n" + StatusText(ProfileStatus(profile));
+    private string ProfileLabel(RobotProfile profile) => profile.Name + "\n● " + ProfileDisplay(profile).Word;
+
+    /// <summary>One word and one colour for a robot wherever it is listed: what the arm itself is doing,
+    /// not merely that its adapter answers. Green holds or follows, yellow needs the operator before it
+    /// can move, red is stopped, grey is not there. Read from the arm server alone, so it is the same
+    /// for the open robot and the others.</summary>
+    internal (string Word, string Tone) ProfileDisplay(RobotProfile profile)
+    {
+        string status = ProfileStatus(profile);
+        if (status != "connected") return (status switch { "Needs recovery" => "Stopped", "In follower group" => "Following", _ => StatusText(status) }, StatusTone(status));
+        // The open robot's row repeats its page header, word and colour, so the two can never disagree.
+        if (openRobotStatus is { } open && open.Profile == profile.Id && profile.Id == ActiveProfile.Id) return (open.Word, open.Tone);
+        var device = state?["devices"]?.AsArray().FirstOrDefault(d => d?["id"]?.GetValue<string>() == profile.CanDeviceId);
+        // Control mode 2 is the arm's own teach button: the hand moves it, software does not.
+        if (device?["status"]?["control"]?.GetValue<int>() == 2) return ("Hand guiding", "warning");
+        bool powered = device?["joints"] is JsonArray joints && joints.Count > 0 && joints.All(joint => joint?["enabled"]?.GetValue<bool>() == true);
+        // Motors on is not yet ready: this session has not connected to the robot, which is what its
+        // page will ask for when opened. Green is kept for a robot with nothing left to do.
+        return (powered ? "Enabled" : "Disabled", "warning");
+    }
+
+    /// <summary>What the open robot's page header last showed; null until a header has been drawn.</summary>
+    private (string Profile, string Word, string Tone)? openRobotStatus;
 
     /// <summary>What the operator reads for a robot's state, and the colour it is read in.</summary>
     internal static string StatusText(string status) => status switch { "connected" => "Connected", "offline" => "Offline", "unassigned" => "Not set up", _ => status };
@@ -296,10 +318,11 @@ public sealed partial class PipersPlugin
         foreach (var profile in preferences.Robots!)
         {
             string status = ProfileStatus(profile);
-            patches["profiles.select." + profile.Id] = new() { ["text"] = ProfileLabel(profile), ["enabled"] = true, ["appearance"] = StatusTone(status) };
+            var display = ProfileDisplay(profile);
+            patches["profiles.select." + profile.Id] = new() { ["text"] = ProfileLabel(profile), ["enabled"] = true, ["appearance"] = display.Tone };
             patches[RobotProfileRouting.RobotStopPrefix + profile.Id] = new() { ["enabled"] = StopAvailable(profile), ["hint"] = StopHint(profile) };
-            patches["overview.dot." + profile.Id] = new() { ["appearance"] = StatusTone(status) };
-            patches["overview.state." + profile.Id] = new() { ["text"] = StatusText(status) };
+            patches["overview.dot." + profile.Id] = new() { ["appearance"] = display.Tone };
+            patches["overview.state." + profile.Id] = new() { ["text"] = display.Word };
             patches["overview.next." + profile.Id] = new() { ["text"] = OverviewNext(status) };
             var assignment = SceneArmAssignment(profile, settingsRobotOptions);
             patches[assignment.Id] = new() { ["text"] = assignment.Text };
