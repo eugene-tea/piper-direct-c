@@ -243,7 +243,7 @@ public sealed partial class PipersPlugin
         bool powered = device?["joints"] is JsonArray joints && joints.Count > 0 && joints.All(joint => joint?["enabled"]?.GetValue<bool>() == true);
         // Motors on is not yet ready: this session has not connected to the robot, which is what its
         // page will ask for when opened. Green is kept for a robot with nothing left to do.
-        return (powered ? "Enabled" : "Disabled", "warning");
+        return (powered ? "Motors on" : "Disabled", "warning");
     }
 
     /// <summary>What the open robot's page header last showed; null until a header has been drawn.</summary>

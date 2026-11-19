@@ -19,7 +19,8 @@ public sealed partial class PipersPlugin
         // band, and the open tab runs into the lighter page below it. Nothing may come between the
         // strip and the page, or the open tab stops reading as part of what it shows.
         var top = Widget.Column("workspace.top", Widget.Column("workspace.top.header",
-            Widget.Column("header", Widget.Row("header.title", Widget.Label("workspace.robot-name", ActiveProfile.Name) with { Appearance = "heading", Height = 30 },
+            Widget.Column("header", Widget.Row("header.title", // A fixed width: in a narrow panel the name otherwise wraps inside itself ("Pipe / r 3") before the status does.
+                Widget.Label("workspace.robot-name", ActiveProfile.Name) with { Appearance = "heading", Height = 30, Width = Math.Clamp(ActiveProfile.Name.Length * 11 + 6, 60, 260) },
                 StatusBadge("workspace.connection.dot", "muted", Widget.Label("workspace.connection", "Connecting…") with { Height = 30 })),
                 Widget.Label("workspace.next", "") with { Visible = false, Hint = "The one thing to do next for this robot." },
                 Widget.Row("header.actions", Widget.Button("enable", "Enable robot") with { Appearance = "primary" },
