@@ -396,17 +396,24 @@ public sealed partial class PipersPlugin
         switchingProfile = true;
         try
         {
+            // Each step is traced: a switch that never returns leaves every later click unanswered, and the
+            // last line in the journal then names the step that did not finish.
+            System.Diagnostics.Trace.TraceInformation("Robot switch: {0}", "releasing control");
             if (!groupViewOnly) await ReleaseProfileControl(cancellation);
             else { CommandAuthority.Revoke(); link = null; approved = linkCommandsEnabled = false; telemetry.Pika.Release(); }
+            System.Diagnostics.Trace.TraceInformation("Robot switch: {0}", "finishing gripper teaching");
             await FinishPikaTeaching("Robot profile or hardware assignment changed", cancellation);
             recovery.PikaTeaching.Store(ActiveProfile);
+            System.Diagnostics.Trace.TraceInformation("Robot switch: {0}", "stopping cameras");
             foreach (string id in new[] { "gripper", "depth" }) await calibration.Capture.Stop(id);
+            System.Diagnostics.Trace.TraceInformation("Robot switch: {0}", "cameras stopped");
             preferences = RobotProfileRouting.Apply(preferences, profile, append);
             recovery.PikaTeaching.Restore(ActiveProfile);
             calibration.Lens.ClearProfiles();
             foreach (string id in new[] { "gripper", "depth" }) calibration.Capture.Connecting(id, "Connecting…");
             calibration.Lens.Reset();
             await LoadCameraCalibration(cancellation);
+            System.Diagnostics.Trace.TraceInformation("Robot switch: {0}", "reading the scene");
             try
             {
                 scene = JsonNode.Parse((await engine.RequestAsync("scene.robots", cancellation: cancellation)).GetRawText())!.AsObject();
@@ -414,14 +421,23 @@ public sealed partial class PipersPlugin
                 await DiscoverSimulationCameras(cancellation);
             }
             catch (PluginRequestException error) { System.Diagnostics.Trace.TraceWarning("Profile scene discovery: {0}", error.Message); }
+            System.Diagnostics.Trace.TraceInformation("Robot switch: {0}", "saving");
             await Save(cancellation);
+            System.Diagnostics.Trace.TraceInformation("Robot switch: {0}", "selecting the adapter");
             string? selectionError = null;
-            if (profile.CanDeviceId.Length > 0 && state?["selected"]?.GetValue<string>() != profile.CanDeviceId)
+            // With no arm server answering there is nobody to ask; the adapter is selected when feedback returns.
+            if (profile.CanDeviceId.Length > 0 && !ServerLive) selectionError = "the arm server is not running";
+            else if (profile.CanDeviceId.Length > 0 && state?["selected"]?.GetValue<string>() != profile.CanDeviceId)
             {
+                // The robot opens whether or not its adapter could be selected: a switch abandoned here
+                // would leave the old robot's page on screen over the new robot's settings.
                 try { await Call(PiperApi.Requests.Select(profile.CanDeviceId, owner), cancellation); }
                 catch (InvalidOperationException error) { selectionError = error.Message; }
+                catch (global::Grpc.Core.RpcException) { selectionError = "the arm server is not running"; }
             }
+            System.Diagnostics.Trace.TraceInformation("Robot switch: {0}", "starting cameras");
             foreach (string id in new[] { "gripper", "depth" }) await RestartCamera(id);
+            System.Diagnostics.Trace.TraceInformation("Robot switch: {0}", "done");
             message = selectionError is null ? profile.Name + " selected. Controls require fresh feedback and Enable robot. Shared bench camera stays running."
                 : profile.Name + " selected · CAN unavailable: " + selectionError;
         }
