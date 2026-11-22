@@ -60,14 +60,20 @@ public sealed partial class PipersPlugin
     /// <summary>The arm server answers: fresh telemetry is arriving from it.</summary>
     private bool ServerLive => telemetry.Latest is { } receipt && receipt.IsFresh(Stopwatch.GetTimestamp());
     /// <summary>The sidebar row: the server's state under its name, like a robot's.</summary>
-    private string ServerLabel => "Arm server\n" + (ServerLive ? "Running" : "Not running");
+    private string ServerLabel => "Arm server\n" + ServerWord;
+    /// <summary>A server this plugin started that has not yet delivered live feedback.</summary>
+    private bool ServerStarting => !ServerLive && shell.Backend.Standing.Owned is { Process.HasExited: false };
+    private string ServerWord => ServerLive ? "Running" : ServerStarting ? "Starting…" : "Not running";
+    private string ServerTone => ServerLive ? "success" : ServerStarting ? "warning" : "muted";
+    private string StartButtonText => ServerStarting ? "Starting…" : "Start server";
+    private string StartButtonHint => ServerLive ? "The arm server is already running." : ServerStarting ? "The arm server is starting; this page updates when live feedback arrives." : StartHint;
     private const string StartHint = "Starts the bundled arm server in monitoring mode. Sends no motor-power or movement commands.";
     private const string RestartHint = "Reopens connections. Releases Pika holding torque; does not clear a robot STOP or replay movement.";
 
     private Widget BackendSetup() => Widget.Column("backend.setup",
-        StatusBadge("backend.state.dot", ServerLive ? "success" : "muted", Widget.Label("backend.state", ServerLive ? "Running" : "Not running") with { Height = 28 }),
+        StatusBadge("backend.state.dot", ServerTone, Widget.Label("backend.state", ServerWord) with { Height = 28 }),
         Widget.Row("backend.actions",
-            Widget.Button("backend.start", "Start server") with { Icon = "play", Enabled = !ServerLive, Appearance = ServerLive ? "default" : "primary", Hint = ServerLive ? "The arm server is already running." : StartHint },
+            Widget.Button("backend.start", StartButtonText) with { Icon = "play", Enabled = !ServerLive && !ServerStarting, Appearance = ServerLive ? "default" : "primary", Hint = StartButtonHint },
             Widget.Button("backend.restart", "Restart server") with { Icon = "refresh", Enabled = ServerLive, Hint = ServerLive ? RestartHint : "Nothing to restart: the arm server is not running." },
             Widget.Button("backend.check", "Check gripper setup")),
         Widget.Column("backend.restart.confirmation", Widget.Label("backend.restart.explanation", "Restarting releases all Pika grippers. Empty the jaws first. Arm power stays unchanged; robot STOPs still need recovery.") with { Height = 64 },
@@ -131,6 +137,8 @@ public sealed partial class PipersPlugin
             shell.Backend.Disown();
             var process = BoundedProcess.Start(start, "Could not start the bundled controller.");
             shell.Backend.Starting(process);
+            shell.Backend.Report("Starting the arm server…");
+            await Update(cancellation); // Show "Starting…" at once instead of an unchanged page.
             process.StandardInput.Close();
             _ = DrainBackendOutput(process.StandardOutput, Path.Combine(global, "server-output.log"));
             _ = DrainBackendOutput(process.StandardError, Path.Combine(global, "server-errors.log"));
@@ -145,7 +153,7 @@ public sealed partial class PipersPlugin
                     if (snapshot is not null && BackendGuards.IsOwned(snapshot, process.Id, null))
                     {
                         shell.Backend.Ready(process, snapshot["token"]!.GetValue<string>());
-                        shell.Backend.Report("Bundled server started in monitoring mode. It belongs to this plugin session; closing Pipers stops this server. Startup sends no motor-power or movement commands.");
+                        shell.Backend.Report("Bundled server started in monitoring mode; connecting to live feedback. It belongs to this plugin session; closing Pipers stops this server. Startup sends no motor-power or movement commands.");
                         return;
                     }
                 }

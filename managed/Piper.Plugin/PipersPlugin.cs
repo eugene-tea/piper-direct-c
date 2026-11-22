@@ -56,7 +56,9 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         recovery = new(new PikaTeachingSession(() => engine.Start.SettingsDirectory));
         var uri = new Uri(address);
         if (!uri.IsLoopback || uri.Scheme != "http") throw new ArgumentException("The controller must use a local HTTP/2 endpoint.");
-        channel = GrpcChannel.ForAddress(uri);
+        // The controller is on loopback, so retrying often is cheap. The default backoff grows to two
+        // minutes while no server runs, which left a just-started server looking dead for ~30 s.
+        channel = GrpcChannel.ForAddress(uri, new GrpcChannelOptions { InitialReconnectBackoff = TimeSpan.FromMilliseconds(250), MaxReconnectBackoff = TimeSpan.FromSeconds(1) });
     }
 
     public async Task StartAsync(PluginContext context, CancellationToken cancellation)
@@ -693,10 +695,10 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         patches["backend.restart.confirmation"] = new() { ["visible"] = backend.Restart == BackendRestartPhase.Confirming };
         patches["backend.status"] = new() { ["text"] = backend.Status };
         bool serverLive = ServerLive;
-        patches["workspace.settings.diagnostics@nav"] = new() { ["text"] = ServerLabel, ["appearance"] = serverLive ? "success" : "muted" };
-        patches["backend.state.dot"] = new() { ["appearance"] = serverLive ? "success" : "muted" };
-        patches["backend.state"] = new() { ["text"] = serverLive ? "Running" : "Not running" };
-        patches["backend.start"] = new() { ["enabled"] = !serverLive, ["appearance"] = serverLive ? "default" : "primary", ["hint"] = serverLive ? "The arm server is already running." : StartHint };
+        patches["workspace.settings.diagnostics@nav"] = new() { ["text"] = ServerLabel, ["appearance"] = ServerTone };
+        patches["backend.state.dot"] = new() { ["appearance"] = ServerTone };
+        patches["backend.state"] = new() { ["text"] = ServerWord };
+        patches["backend.start"] = new() { ["text"] = StartButtonText, ["enabled"] = !serverLive && !ServerStarting, ["appearance"] = serverLive ? "default" : "primary", ["hint"] = StartButtonHint };
         patches["backend.restart"] = new() { ["enabled"] = serverLive, ["hint"] = serverLive ? RestartHint : "Nothing to restart: the arm server is not running." };
         patches["backend.prerequisites"] = new() { ["text"] = backend.Setup };
         patches["workspace.action-error"] = new() { ["text"] = uiActionError, ["hint"] = uiActionError, ["visible"] = uiActionError.Length > 0 };
