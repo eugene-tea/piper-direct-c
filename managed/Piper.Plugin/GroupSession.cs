@@ -170,7 +170,15 @@ internal sealed class GroupSession(string backend, string sceneId, string entity
 
     public void BindRun(string run) => Volatile.Write(ref runId, run);
     /// <summary>Keeps the first failure only. False when one was already recorded.</summary>
-    public bool TryRecordFailure(string reason) => Interlocked.CompareExchange(ref firstFailure, reason, "").Length == 0;
+    public bool TryRecordFailure(string reason, string profileId = "")
+    {
+        if (Interlocked.CompareExchange(ref firstFailure, reason, "").Length != 0) return false;
+        Volatile.Write(ref failedProfileId, profileId);
+        return true;
+    }
+    /// <summary>The robot whose check recorded <see cref="FirstFailure"/>; empty when it was not one robot.</summary>
+    public string FailedProfileId => Volatile.Read(ref failedProfileId);
+    private string failedProfileId = "";
     public void EndWith(string reason) => Volatile.Write(ref endReason, reason);
     public void AcknowledgeEpisode(string episodeId) => Volatile.Write(ref acknowledgedEpisode, episodeId);
     public void AttachHeartbeats(Task worker) => Volatile.Write(ref heartbeats, worker);

@@ -58,7 +58,9 @@ internal static class OrderedSimulationExecutionTests
         Reject(() => SimulationFollowPolicy.ValidateActivation(paused, hardware, activation, hardware with { Generation = 8 }, 1_000_020, 20),
             "Activation accepted a replaced CAN connection");
         var empty = new OrderedSimulationExecution(first, hardware, 1);
-        Reject(() => empty.Step(0, hardware with { GripperOpeningMm = 0 }, true, 0, 1), "Buffered following ignored a genuine Pika drift/raw-zero tracking violation");
+        empty.Step(0, hardware with { GripperOpeningMm = 0 }, true, 0, 1); // A burst shorter than the glitch tolerance is ignored.
+        Reject(() => empty.Step(OrderedSimulationExecution.JawGlitchToleranceSeconds + .001, hardware with { GripperOpeningMm = 0 }, true, 0, 2),
+            "Buffered following ignored a genuine Pika drift/raw-zero tracking violation");
         var lagged = new OrderedSimulationExecution(first, hardware, 1);
         lagged.Path.Append([Frame(1, 1, 0, "arm:1"), Frame(2, 2, 20, "arm:1"), Frame(3, 2.02, 20, "finish:2", complete: true)]);
         lagged.Step(0, hardware, false, 0, 1);

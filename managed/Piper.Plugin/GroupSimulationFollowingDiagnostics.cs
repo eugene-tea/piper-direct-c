@@ -17,7 +17,7 @@ public sealed partial class PipersPlugin
             return text.Length <= 2000 ? text : text[..2000];
         }
         string reason = Redact(error.Message);
-        if (!group.TryRecordFailure(reason))
+        if (!group.TryRecordFailure(reason, error is FollowLaneException failedLane ? failedLane.ProfileId : ""))
         {
             foreach (var lane in group.Lanes) lane.Diagnostics?.AppendCleanup([reason]);
             return;

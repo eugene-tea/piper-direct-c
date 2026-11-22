@@ -22,6 +22,12 @@ public sealed partial class PipersPlugin
         };
     }
 
+    /// <summary>A follow check that failed for one robot; carries which robot so the UI can mark it.</summary>
+    internal sealed class FollowLaneException(string profileId, string message, Exception inner) : InvalidOperationException(message, inner)
+    {
+        public string ProfileId { get; } = profileId;
+    }
+
     private sealed record GroupRetirement(string Heading, IReadOnlyList<GroupLaneRetirement> Lanes)
     {
         public string Summary { get; } = string.Join("\n", new[] { Heading }.Concat(Lanes.Select(lane => lane.Summary)));
@@ -142,7 +148,7 @@ public sealed partial class PipersPlugin
                 string heading = group.FirstFailure.Length > 0 ? "Following stopped\n" + group.FirstFailure :
                     group.EndReason.Length > 0 ? group.EndReason : "Following stopped";
                 follow.Report(heading);
-                follow.Summarize(new GroupRetirement(heading, lanes).Summary);
+                follow.Summarize(new GroupRetirement(heading, lanes).Summary, group.FirstFailure, group.FailedProfileId);
                 foreach (var lane in group.Lanes)
                     if (lane.Diagnostics is { } diagnostics)
                         try { await diagnostics.Completion.WaitAsync(TimeSpan.FromSeconds(1)); }
@@ -318,7 +324,7 @@ public sealed partial class PipersPlugin
                             targets[lane.Profile.Id] = lane.Execution!.Step(group.Clock.GetTimestamp() / (double)group.Clock.TimestampFrequency,
                                 measured.Hardware, measured.Stationary, measured.GripperSpeed, measured.GripperFeedback, group.Barrier.MayStart(lane.Execution));
                         }
-                        catch (Exception error) { throw new InvalidOperationException(lane.Profile.Name + ": " + error.Message, error); }
+                        catch (Exception error) { throw new FollowLaneException(lane.Profile.Id, lane.Profile.Name + ": " + error.Message, error); }
                     }
                     follow.Report($"Following {group.Lanes.Length} robots · {group.Lanes.Select(l => l.Execution!.ActivePhase?.End.Phase).FirstOrDefault(p => p is not null) ?? "holding"}",
                         "All selected arms share phase barriers. Faster arms hold their measured endpoint until their partners arrive; the next episode waits for every arm and gripper.");

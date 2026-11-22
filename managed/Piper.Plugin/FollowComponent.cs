@@ -8,7 +8,9 @@ namespace LuckyRobots.Piper.Plugin;
 /// Session is derived from the installed session; the other stages are one immutable outcome,
 /// so a setup failure and a retirement summary can never both be set.</summary>
 internal enum GroupFollowStage { Idle, Discovering, Session, Summary, SetupFailed }
-internal sealed record GroupFollowOutcome(GroupFollowStage Stage, string Summary = "")
+/// <param name="Failure">Why the last run stopped, when it stopped on an error; empty otherwise.</param>
+/// <param name="FailedProfileId">The robot whose check stopped the run; empty when the cause was not one robot.</param>
+internal sealed record GroupFollowOutcome(GroupFollowStage Stage, string Summary = "", string Failure = "", string FailedProfileId = "")
 {
     public static readonly GroupFollowOutcome Idle = new(GroupFollowStage.Idle);
 }
@@ -126,7 +128,8 @@ internal sealed class FollowComponent(TimeProvider clock)
     }
 
     /// <summary>Records how a retiring session ended. Its coordinator calls this before <see cref="Retire"/>.</summary>
-    public void Summarize(string summary) => Volatile.Write(ref outcome, new(GroupFollowStage.Summary, summary));
+    public void Summarize(string summary, string failure = "", string failedProfileId = "") =>
+        Volatile.Write(ref outcome, new(GroupFollowStage.Summary, summary, failure, failedProfileId));
 
     /// <summary>Advances the control epoch and frees the slot, only for the session that holds it.</summary>
     public bool Retire(GroupSession retired)

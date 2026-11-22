@@ -19,7 +19,14 @@ internal sealed partial class FollowFixture
     public FollowPreparationReport Preparation() => plugin.GroupPreparation(null, null, null);
     // The status and the Follow button live on the Follow simulation page; Stop following stays in
     // the sidebar, where it is reachable from every page.
-    public string SidebarStatus() => Widgets(plugin.FollowPage()).Single(w => w.Id == "group.follow.status").Text!;
+    /// <summary>What the Follow page reports: the red last-run failure line (when shown), then the status line.</summary>
+    public string SidebarStatus()
+    {
+        var page = Widgets(plugin.FollowPage()).ToArray();
+        var error = page.Single(w => w.Id == "group.follow.error");
+        string status = page.Single(w => w.Id == "group.follow.status").Text!;
+        return error.Visible != false && error.Text is { Length: > 0 } failure ? failure + "\n" + status : status;
+    }
     public bool SidebarFollowEnabled() => Widgets(plugin.FollowPage()).Single(w => w.Id == "group.follow.toggle").Enabled != false;
     private static IEnumerable<Widget> Widgets(Widget root) => new[] { root }.Concat((root.Children ?? []).SelectMany(Widgets));
     public Task ClickSidebarGroupStop()

@@ -27,7 +27,7 @@ public sealed partial class PipersPlugin
             new Widget("checkbox", "group.follow.include." + p.Id) { Text = p.Name, Value = p.FollowSimulationSelected ? 1 : 0, Width = 150,
                 Enabled = !GroupFollowActive, Hint = "Include this robot in the group. Ticking this does not start Play or move hardware." },
             Widget.Label("group.follow.arm." + p.Id, FollowArm(p)) with { Width = 150, Height = 28, Appearance = "muted" },
-            Widget.Label("group.follow.ready." + p.Id, FollowReadiness(p, preparation).Text) with { Height = 28, Appearance = FollowReadiness(p, preparation).Tone }) with { Spacing = 8 }).ToArray();
+            Widget.Label("group.follow.ready." + p.Id, FollowRowState(p, preparation).Text) with { Height = 28, Appearance = FollowRowState(p, preparation).Tone }) with { Spacing = 8 }).ToArray();
         return Widget.Column("group.follow",
             Widget.Label("group.follow.steps", FollowSteps(preparation)) with { Height = 28,
                 Hint = "The order for one run. A filled dot is done; the arrow is what to do next." },
@@ -40,6 +40,8 @@ public sealed partial class PipersPlugin
                     Enabled = !GroupFollowActive && preparation.RobotCount > 0,
                     Hint = preparation.Ready ? "Arm the included robots without entering Play. Then press the editor's Play button once for the whole group." : preparation.Summary },
                 Widget.Label("group.follow.then", GroupFollowActive ? "Running. Stop following is in the left sidebar." : "Then press Play in the editor.") with { Appearance = "muted" }) with { Spacing = 12 },
+            Widget.Label("group.follow.error", LastRunFailure()) with { Appearance = "danger", Visible = LastRunFailure().Length > 0,
+                Height = GroupStatusHeight(LastRunFailure()), Hint = "Why the last run stopped. Stays here until the next Follow simulation or a change to the group." },
             Widget.Label("group.follow.status", status) with {
                 Height = GroupStatusHeight(status), Hint = GroupFollowActive ? follow.Status.Detail : status }) with { Spacing = 12 };
     }
@@ -49,6 +51,16 @@ public sealed partial class PipersPlugin
         var arm = SceneRobotBindings.Options(scene?["robots"]?.AsArray().OfType<JsonObject>() ?? []).SingleOrDefault(option => option.Matches(profile));
         return arm?.Name ?? (profile.RobotId.Length > 0 ? "Not in this scene" : "No arm assigned");
     }
+
+    /// <summary>The robot whose check stopped the last run, while no run is active; empty otherwise.</summary>
+    internal string LastRunFailedProfile => GroupFollowActive ? "" : follow.Outcome.FailedProfileId;
+
+    /// <summary>Why the last run stopped, shown in red on the Follow page until the next run.</summary>
+    private string LastRunFailure() => GroupFollowActive || follow.Outcome.Failure.Length == 0 ? "" : "Last run stopped · " + follow.Outcome.Failure;
+
+    private (string Text, string Tone) FollowRowState(RobotProfile profile, FollowPreparationReport preparation) =>
+        profile.Id == LastRunFailedProfile && profile.FollowSimulationSelected ? ("Stopped the last run · " + FollowReadiness(profile, preparation).Text, "danger")
+        : FollowReadiness(profile, preparation);
 
     private static (string Text, string Tone) FollowReadiness(RobotProfile profile, FollowPreparationReport preparation) =>
         !profile.FollowSimulationSelected ? ("Not included", "muted")
@@ -89,7 +101,15 @@ public sealed partial class PipersPlugin
     };
 
     private string GroupStatusLabel(FollowPreparationReport preparation) => GroupFollowActive ? follow.Status.Headline
-        : follow.Outcome is { Summary.Length: > 0 } outcome ? "Last run: " + outcome.Summary : preparation.Summary;
+        : follow.Outcome is { Summary.Length: > 0 } outcome ? "Last run: " + WithoutFailureHeading(outcome) : preparation.Summary;
+
+    /// <summary>The failure already has its own red line, so the summary keeps only the per-robot lines.</summary>
+    private static string WithoutFailureHeading(GroupFollowOutcome outcome)
+    {
+        string heading = "Following stopped\n" + outcome.Failure;
+        return outcome.Failure.Length > 0 && outcome.Summary.StartsWith(heading, StringComparison.Ordinal)
+            ? "Following stopped" + outcome.Summary[heading.Length..] : outcome.Summary;
+    }
 
     private int GroupStatusHeight(string status) => GroupFollowActive ? 72
         : Math.Clamp((status.Count(c => c == '\n') + 2) * 38, 72, 420);
@@ -139,6 +159,8 @@ public sealed partial class PipersPlugin
             ["hint"] = active ? follow.Status.Detail : status };
         patches["group.follow.selected"] = new() { ["value"] = ActiveProfile.FollowSimulationSelected ? 1 : 0,
             ["enabled"] = !active, ["hint"] = active ? "Stop following before changing the group." : "Include this robot when you press Follow simulation." };
+        string failure = LastRunFailure();
+        patches["group.follow.error"] = new() { ["text"] = failure, ["visible"] = failure.Length > 0, ["height"] = GroupStatusHeight(failure) };
         patches["group.follow.steps"] = new() { ["text"] = FollowSteps(preparation) };
         patches["group.follow.then"] = new() { ["text"] = active ? "Running. Stop following is in the left sidebar." : "Then press Play in the editor." };
         patches["overview.following"] = new() { ["text"] = active ? follow.Status.Headline : "Not armed" };
@@ -146,7 +168,7 @@ public sealed partial class PipersPlugin
         {
             patches["group.follow.include." + profile.Id] = new() { ["value"] = profile.FollowSimulationSelected ? 1 : 0, ["enabled"] = !active };
             patches["group.follow.arm." + profile.Id] = new() { ["text"] = FollowArm(profile) };
-            var readiness = FollowReadiness(profile, preparation);
+            var readiness = FollowRowState(profile, preparation);
             patches["group.follow.ready." + profile.Id] = new() { ["text"] = readiness.Text, ["appearance"] = readiness.Tone };
         }
         if (!active) return;

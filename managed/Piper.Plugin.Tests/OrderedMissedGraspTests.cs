@@ -80,7 +80,9 @@ internal static class OrderedMissedGraspTests
 
         var guarded = new OrderedSimulationExecution(first, Real(80), 1); guarded.Path.Append(Cycle());
         double time = 0; Finish(guarded, ref time, 36, 0);
-        Reject(() => guarded.Step(time, Real(38.01), true, 0, 100 + time), "An empty-close reference loosened the existing 2mm jaw continuity guard");
+        guarded.Step(time, Real(38.01), true, 0, 100 + time);
+        Reject(() => guarded.Step(time + OrderedSimulationExecution.JawGlitchToleranceSeconds + .001, Real(38.01), true, 0, 101 + time),
+            "An empty-close reference loosened the existing 2mm jaw continuity guard");
         guarded = new(first, Real(80), 1); guarded.Path.Append(Cycle()); time = 0; Finish(guarded, ref time, 36, 0);
         Reject(() => guarded.Step(time, Real(36) with { NativeReference = Real(36, 6).NativeReference }, true, 0, 100 + time),
             "A missed grasp bypassed the native-reference arm tracking guard");
@@ -93,7 +95,8 @@ internal static class OrderedMissedGraspTests
         time = 0; Finish(guarded, ref time, 36, 0); guarded.Step(time, Real(36, 1), true, 0, 100 + time);
         Check(guarded.ActivePhase?.Kind == OrderedSimulationPhaseKind.Arm && guarded.PhysicalGraspMissed && guarded.ExpectedMeasuredOpeningMm == 36,
             "A known empty real close stopped the original cycle because the simulated contact was more than 10mm away");
-        Reject(() => guarded.Step(time + .01, Real(38.01, 1), true, 0, 101 + time),
+        guarded.Step(time + .01, Real(38.01, 1), true, 0, 101 + time);
+        Reject(() => guarded.Step(time + .011 + OrderedSimulationExecution.JawGlitchToleranceSeconds, Real(38.01, 1), true, 0, 102 + time),
             "Model-mismatch continuation removed the 2mm actual empty-jaw continuity guard");
         guarded = new(first, Real(80), 1);
         guarded.Path.Append(Cycle(true).Select(frame => frame.Cursor == 2 ? frame with { MeasuredOpeningMm = 59 }

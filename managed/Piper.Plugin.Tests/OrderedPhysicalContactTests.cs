@@ -59,11 +59,13 @@ internal static class OrderedPhysicalContactTests
         execution.Step(time, Real(80, 1), true, 0, 100 + time);
         Check(execution.CompletedCursor == 8 && execution.QualifiedContactOpeningMm is null,
             "An opening command fabricated a new contact baseline");
-        Reject(() => execution.Step(time + .01, Real(43, 1), true, 0, 101 + time),
+        execution.Step(time + .01, Real(43, 1), true, 0, 101 + time);
+        Reject(() => execution.Step(time + .011 + OrderedSimulationExecution.JawGlitchToleranceSeconds, Real(43, 1), true, 0, 102 + time),
             "The previous 43mm baseline survived reopening and bypassed the new 80mm target checks");
 
         execution = Scenario(); time = 0; Finish(execution, ref time, 43, 0);
-        Reject(() => execution.Step(time, Real(45.01), true, 0, 100 + time),
+        execution.Step(time, Real(45.01), true, 0, 100 + time);
+        Reject(() => execution.Step(time + .001 + OrderedSimulationExecution.JawGlitchToleranceSeconds, Real(45.01), true, 0, 101 + time),
             "Opening away from qualified contact beyond 2mm was silently treated as contact while carrying");
         Check(execution.CompletedCursor == 2, "An unexplained contact-loss sample advanced to the next arm endpoint");
         execution = Scenario(); time = 0; Finish(execution, ref time, 43, 0);
@@ -82,7 +84,8 @@ internal static class OrderedPhysicalContactTests
         Check(execution.CompletedCursor == 2, "Contact continuity advanced an arm that did not reach its endpoint");
 
         execution = Scenario(laterContact: 31); time = 0; Finish(execution, ref time, 43, 0);
-        Reject(() => execution.Step(time, Real(43), true, 0, 100 + time),
+        execution.Step(time, Real(43), true, 0, 100 + time);
+        Reject(() => execution.Step(time + .001 + OrderedSimulationExecution.JawGlitchToleranceSeconds, Real(43), true, 0, 101 + time),
             "A physical contact baseline bypassed the existing 10mm source tracking backstop");
 
         foreach (double noncontact in new[] { 36d, 37, 37.5, 38 })
@@ -171,7 +174,8 @@ internal static class OrderedPhysicalContactTests
         Finish(execution, ref time, 80, 1);
         Check(execution.CompletedCursor == 16 && execution.ExpectedMeasuredOpeningMm == 80 && execution.QualifiedContactOpeningMm is null,
             "Same-command home motion discarded the qualified opening endpoint or fabricated secure contact evidence");
-        Reject(() => execution.Step(time, Real(77.9, 1), true, 0, 100 + time),
+        execution.Step(time, Real(77.9, 1), true, 0, 100 + time);
+        Reject(() => execution.Step(time + .001 + OrderedSimulationExecution.JawGlitchToleranceSeconds, Real(77.9, 1), true, 0, 101 + time),
             "An opening reference allowed subsequent physical drift beyond 2mm");
     }
 }

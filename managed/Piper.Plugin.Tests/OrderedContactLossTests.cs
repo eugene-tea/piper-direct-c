@@ -54,9 +54,18 @@ internal static class OrderedContactLossTests
         value = Qualified(out time); value.Step(time, Real(35), false, -.05, 4);
         Reject(() => value.Step(time + .01, Real(37.01), false, 0, 5), "A reversal greater than 2mm was treated as monotonic closing");
         value = Qualified(out time);
-        Reject(() => value.Step(time, Real(40.01), false, 0, 4), "Opening away from contact beyond 2mm entered the soft-loss path");
+        value.Step(time, Real(40.01), false, 0, 4); // One burst shorter than the glitch tolerance is ignored...
+        Reject(() => value.Step(time + OrderedSimulationExecution.JawGlitchToleranceSeconds + .001, Real(40.01), false, 0, 5),
+            "Opening away from contact beyond 2mm entered the soft-loss path"); // ...but a persistent one stops.
         value = Qualified(out time);
-        Reject(() => value.Step(time, Real(28.99), false, 0, 4), "A sample below the close endpoint minus 1mm entered soft-loss qualification");
+        value.Step(time, Real(0), false, 0, 4); value.Step(time + .01, Real(0), false, 0, 5);
+        value.Step(time + .02, Real(38), false, 0, 6);
+        Check(value.QualifiedContactOpeningMm == 38 && !value.QualifyingLostContact && !value.PhysicalGraspMissed,
+            "A 10ms burst of impossible jaw readings stopped following or changed the jaw reference");
+        value = Qualified(out time);
+        value.Step(time, Real(28.99), false, 0, 4);
+        Reject(() => value.Step(time + OrderedSimulationExecution.JawGlitchToleranceSeconds + .001, Real(28.99), false, 0, 5),
+            "A sample below the close endpoint minus 1mm entered soft-loss qualification");
         value = Qualified(out time);
         Reject(() => value.Step(time, Real(35), false, .03, 4), "Reported opening velocity was accepted as motion toward the close endpoint");
 

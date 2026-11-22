@@ -239,6 +239,9 @@ public sealed partial class PipersPlugin
         // robot is the exception: its header already says it is waiting, and its row repeats the header.
         if (NoFeedback(profile) && !(open && status == "connected")) return ("No feedback", "muted");
         if (status != "connected") return (status switch { "Needs recovery" => "Stopped", "In follower group" => "Following", _ => StatusText(status) }, StatusTone(status));
+        // The robot whose check stopped the last follow run says so until the next run, even while its
+        // page header says the arm itself is ready: with several arms, this is where to look.
+        if (profile.Id == LastRunFailedProfile) return ("Follow stopped", "warning");
         // The open robot's row repeats its page header, word and colour, so the two can never disagree.
         if (open) return (openRobotStatus!.Value.Word, openRobotStatus.Value.Tone);
         var device = state?["devices"]?.AsArray().FirstOrDefault(d => d?["id"]?.GetValue<string>() == profile.CanDeviceId);

@@ -8,6 +8,11 @@ public sealed class OrderedSimulationExecution
 {
     /// <summary>Lost contact must settle at the unchanged close command within this time.</summary>
     private const double ContactLossDeadlineSeconds = .250;
+    /// <summary>How long a jaw reading must stay outside its allowed band before following stops.
+    /// Bad Pika bursts of ~10–90 ms were observed (an open jaw reading exactly 0 mm); 250 ms matches the
+    /// contact-loss and source-lease windows, so a real slip still stops within a quarter second.</summary>
+    internal const double JawGlitchToleranceSeconds = .250;
+    private double jawViolationBegan = double.NaN;
     public OrderedSimulationPath Path { get; }
     public OrderedSimulationPhase? ActivePhase { get; private set; }
     public OrderedSimulationTarget Target { get; private set; }
@@ -101,10 +106,26 @@ public sealed class OrderedSimulationExecution
             // below still detects any actual change from that reference.
             low = high = jaw.Opening;
         }
-        if (hardware.GripperOpeningMm < low - SimulationFollowPolicy.TrackingGripperToleranceMm || hardware.GripperOpeningMm > high + SimulationFollowPolicy.TrackingGripperToleranceMm)
-            throw new InvalidOperationException($"Real Pika is more than {SimulationFollowPolicy.TrackingGripperToleranceMm:0} mm from its retimed jaw phase. Following stopped.");
-        if (jaw.Resolved && !QualifyingLostContact && Math.Abs(hardware.GripperOpeningMm - jaw.Opening) > 2)
-            throw new InvalidOperationException("Pika's measured opening changed more than 2 mm from its settled jaw reference. Following stopped.");
+        bool outsidePhase = hardware.GripperOpeningMm < low - SimulationFollowPolicy.TrackingGripperToleranceMm ||
+            hardware.GripperOpeningMm > high + SimulationFollowPolicy.TrackingGripperToleranceMm;
+        bool leftReference = jaw.Resolved && !QualifyingLostContact && Math.Abs(hardware.GripperOpeningMm - jaw.Opening) > 2;
+        if (outsidePhase || leftReference)
+        {
+            // A Pika can report a single burst of impossible readings (observed: an idle open jaw
+            // reading 79 mm, then exactly 0 mm for ~10 ms, then 79 mm again). Only a jaw reading that
+            // stays wrong for JawGlitchToleranceSeconds stops following; until then the sample is
+            // not used for anything, so it can neither complete a phase nor set a jaw reference.
+            if (double.IsNaN(jawViolationBegan)) jawViolationBegan = nowSeconds;
+            if (nowSeconds - jawViolationBegan < JawGlitchToleranceSeconds) { settledBegan = double.NaN; return Target; }
+            string persisted = $" Jaw stayed wrong for {(nowSeconds - jawViolationBegan) * 1000:0} ms.";
+            if (outsidePhase)
+                throw new InvalidOperationException($"Real Pika is more than {SimulationFollowPolicy.TrackingGripperToleranceMm:0} mm from its retimed jaw phase. Following stopped." +
+                    $" Jaw {hardware.GripperOpeningMm:0.0} mm, simulation range {low:0.0}–{high:0.0} mm, commanded {Target.OpeningMm:0.0} mm" +
+                    (phase is null ? "." : $", phase \"{phase.End.Phase}\".") + persisted);
+            throw new InvalidOperationException("Pika's measured opening changed more than 2 mm from its settled jaw reference. Following stopped." +
+                $" Jaw {hardware.GripperOpeningMm:0.0} mm, reference {jaw.Opening:0.0} mm." + persisted);
+        }
+        jawViolationBegan = double.NaN;
         if (phase is null) return Target;
         // A closing command intentionally can lead its measured contact opening.
         // Opening resolves to its command; neither aperture check proves a grasp.
@@ -115,7 +136,11 @@ public sealed class OrderedSimulationExecution
             Math.Abs(gripperSpeed) <= PikaProtocol.StationarySpeedRadiansPerSecond && (unconfirmedClose ||
                 Math.Abs(hardware.GripperOpeningMm - expected) <= OpeningArrivalToleranceMm &&
                 (!RequiresPhysicalContactCandidate || hardware.GripperOpeningMm - phase.End.CommandOpeningMm > 2));
-        if (!arrived) settledBegan = double.NaN;
+        if (!arrived)
+        {
+            settledBegan = double.NaN;
+            lastUnsettled = UnsettledReason(phase, hardware, armStationary, gripperSpeed, expected, unconfirmedClose);
+        }
         else if (double.IsNaN(settledBegan) || settledUnconfirmedCandidate != unconfirmedClose)
         { settledBegan = nowSeconds; settledFeedback = gripperFeedbackTime; settledUnconfirmedCandidate = unconfirmedClose; }
         else if (nowSeconds - settledBegan >= .1 && gripperFeedbackTime > settledFeedback)
@@ -152,8 +177,40 @@ public sealed class OrderedSimulationExecution
             Path.Complete(phase); CompletedCursor = phase.End.Cursor; expectedOpening = phase.ExpectedMeasuredOpeningMm; ActivePhase = null;
         }
         if (ElapsedSeconds > phase.DurationSeconds + 15)
-            throw new InvalidOperationException("The real arm or Pika did not settle at its ordered phase endpoint; the next phase was not started.");
+            throw new InvalidOperationException("The real arm or Pika did not settle at its ordered phase endpoint; the next phase was not started." +
+                (lastUnsettled.Length > 0 ? $" Phase \"{phase.End.Phase}\": {lastUnsettled}." : ""));
         return Target;
+    }
+
+    private string lastUnsettled = "";
+
+    /// <summary>Names the first settle condition that is not met, with the measured
+    /// and required values, so a timeout says what to fix. Diagnostic text only.</summary>
+    private string UnsettledReason(OrderedSimulationPhase phase, SimulationFollowHardware hardware, bool armStationary,
+        double gripperSpeed, double expected, bool unconfirmedClose)
+    {
+        var reasons = new List<string>();
+        if (QualifyingLostContact) reasons.Add("Pika contact was changing");
+        if (ElapsedSeconds < phase.DurationSeconds) return "";
+        if (!armStationary) reasons.Add("arm still moving");
+        for (int joint = 0; joint < 6; joint++)
+        {
+            double error = Math.Abs(Target.JointDegrees[joint] - hardware.JointDegrees[joint]);
+            double tolerance = SimulationFollowPolicy.ArrivalJointToleranceDegrees(joint);
+            if (error > tolerance)
+                reasons.Add($"J{joint + 1} {hardware.JointDegrees[joint]:0.00}° vs target {Target.JointDegrees[joint]:0.00}° (off {error:0.00}°, allowed {tolerance:0.##}°)");
+        }
+        if (Math.Abs(gripperSpeed) > PikaProtocol.StationarySpeedRadiansPerSecond)
+            reasons.Add($"Pika still moving ({gripperSpeed:0.000} rad/s, allowed {PikaProtocol.StationarySpeedRadiansPerSecond:0.00})");
+        if (!unconfirmedClose)
+        {
+            double opening = hardware.GripperOpeningMm;
+            if (Math.Abs(opening - expected) > OpeningArrivalToleranceMm)
+                reasons.Add($"jaw {opening:0.0} mm vs simulation {expected:0.0} mm (allowed ±{OpeningArrivalToleranceMm:0} mm)");
+            if (RequiresPhysicalContactCandidate && opening - phase.End.CommandOpeningMm <= 2)
+                reasons.Add($"jaw {opening:0.0} mm not above close command {phase.End.CommandOpeningMm:0.0} mm + 2 mm");
+        }
+        return string.Join("; ", reasons);
     }
 
     private void UpdateContactLoss(double now, double opening, double speed, double feedbackTime)
