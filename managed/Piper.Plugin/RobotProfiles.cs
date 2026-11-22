@@ -191,13 +191,15 @@ public sealed partial class PipersPlugin
                 { Appearance = ProfileDisplay(p).Tone, Hint = p.CanDeviceId.Length == 0 ? "Assign an adapter in this robot's Setup tab" : null },
             Widget.Button(RobotProfileRouting.RobotStopPrefix + p.Id, "Stop") with { Height = 28, Width = 52, Appearance = "danger-quiet",
                 Enabled = StopAvailable(p), Hint = StopHint(p) },
-            Widget.Label("profiles.row.pad." + p.Id, "") with { Width = 6 }) with { Spacing = 4 })).ToList();
+            // With the row gap, Stop ends 8 px from the edge, where the group separators end.
+            Widget.Label("profiles.row.pad." + p.Id, "") with { Width = 4 }) with { Spacing = 4 })).ToList();
         // Adding a robot opens it, which releases the open robot's control: not offered while that
         // robot is under control or a group is following, so a slip below the list cannot do it.
         robots.Add(Widget.NavItem("profiles.add", "Add robot", "plus", false) with {
             Enabled = preferences.Robots!.Length < RobotProfileRouting.MaximumProfiles && !approved && !GroupFollowActive,
             Hint = approved || GroupFollowActive ? "Disable the open robot and stop following before adding another." : null });
-        var rows = new List<Widget> { Widget.NavGroup("profiles.heading", "Robots", "robot-arm", !bench) };
+        // The Settings sidebar's top inset: its first row starts 8 px below the panel's top edge.
+        var rows = new List<Widget> { Widget.Label("sidebar.top", "") with { Height = 6 }, Widget.NavGroup("profiles.heading", "Robots", "robot-arm", !bench) };
         rows.AddRange(robots);
         rows.AddRange([
             Widget.Separator("sidebar.bench.separator"),
@@ -205,16 +207,17 @@ public sealed partial class PipersPlugin
             Widget.NavItem("workspace.overview", "Overview", "eye", Navigation.Page == WorkspacePage.Overview),
             Widget.NavItem("workspace.follow", "Follow simulation", "play", Navigation.Page == WorkspacePage.Follow),
             // Always one click away, on every page, while a group is armed or running.
+            // Hidden as a whole when no group runs: an empty row would still add a row gap to the list.
             Widget.Row("group.follow.cancel.row", Widget.Label("group.follow.cancel.pad", "") with { Width = 28 },
                 Widget.Button("group.follow.cancel", "Stop following") with { Height = 30, Width = 150, Visible = GroupFollowActive,
-                    Hint = "Stop sending targets, request a hold for the arms and grippers used, and pause the simulation." }),
+                    Hint = "Stop sending targets, request a hold for the arms and grippers used, and pause the simulation." }) with { Visible = GroupFollowActive },
             Widget.NavItem("workspace.camera.bench@nav", "Bench camera", "camera", benchCamera),
             Widget.Separator("sidebar.settings.separator"),
             Widget.NavGroup("sidebar.settings.heading", "Settings", "gear", serverPage),
             Widget.NavItem("workspace.settings.diagnostics@nav", ServerLabel, "server", serverPage) with { Appearance = ServerLive ? "success" : "muted" }]);
-        // The Settings sidebar's own width and row gap; rows reach both edges so the lit row spans it.
-        // The lighter panel grey of the editor's Settings sidebar, not a black strip.
-        return Widget.Column("sidebar", rows.ToArray()) with { Width = 244, Padding = 4, Spacing = 2, Appearance = "panel" };
+        // As the editor's Settings sidebar: the panel's own grey, no side padding so a lit row spans the
+        // whole list, and its 2 px row gap. The page beside it is the lighter card.
+        return Widget.Column("sidebar", rows.ToArray()) with { Width = 244, Spacing = 2 };
     }
 
     /// <summary>A robot with no adapter, or one the arm server reports as absent, has nothing to stop.

@@ -30,7 +30,7 @@ public sealed partial class PipersPlugin
             Widget.Label("workspace.action-error", "") with { Height = 64, Visible = false, Appearance = "danger" },
             Widget.Label("workspace.page-title", BenchPageTitle()) with { Appearance = "heading", Visible = bench }) with { Padding = 18, Spacing = 12 },
             // Tabs belong to the selected robot. A bench page is not about one robot and shows its own title.
-            Widget.Tabs("workspace.pages", WorkspaceTabs.RobotTabs, WorkspaceTabs.PageIndex(Navigation)) with { Icons = ["", "", "", "gear"], Visible = !bench })
+            Widget.Tabs("workspace.pages", WorkspaceTabs.RobotTabs, WorkspaceTabs.PageIndex(Navigation)) with { Icons = ["", "", "", "gear"], Visible = !bench, Appearance = "panel" })
             with { Spacing = 0, Appearance = bench ? null : "sidebar" };
         var page = Widget.Column("workspace.page",
             Confirmation("safety", Widget.Label("safety.text", "Make sure it is safe to move the robot."),
@@ -48,8 +48,9 @@ public sealed partial class PipersPlugin
                 Widget.Button("recovery.home", "Arm resting, path clear — recover to zero") with { Enabled = false },
                 Widget.Button("recovery.guide.cancel", "Cancel recovery guide") with { Visible = false, Appearance = "quiet" }) with { Visible = false, Padding = 12, Spacing = 8, Appearance = "panel" },
             body, Widget.Label("status", "Connecting…") with { Height = 28, Appearance = "muted", Visible = !bench }) with { Padding = 18, Spacing = 12 };
-        var content = Widget.Column("controls", top, page) with { Spacing = 0 };
-        return Widget.Row("workspace", RobotSidebar(), TidyLayout(content, inColumn: false)) with { Spacing = 0 };
+        // The page is a lighter card beside the list, as in the editor's Settings panel.
+        var content = Widget.Column("controls", top, page) with { Spacing = 0, Appearance = "panel" };
+        return Widget.Row("workspace", RobotSidebar(), TidyLayout(content, inColumn: false)) with { Spacing = 8 };
     }
 
     /// <summary>One layout rule for every page, applied after the page is built:

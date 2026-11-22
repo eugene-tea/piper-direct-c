@@ -155,6 +155,7 @@ public sealed partial class PipersPlugin
         patches["group.follow.toggle"] = new() { ["visible"] = !active,
             ["enabled"] = !active && preparation.RobotCount > 0, ["hint"] = active ? follow.Status.Detail : preparation.Summary };
         patches["group.follow.cancel"] = new() { ["visible"] = active, ["enabled"] = true };
+        patches["group.follow.cancel.row"] = new() { ["visible"] = active };
         patches["group.follow.status"] = new() { ["text"] = status, ["height"] = GroupStatusHeight(status),
             ["hint"] = active ? follow.Status.Detail : status };
         patches["group.follow.selected"] = new() { ["value"] = ActiveProfile.FollowSimulationSelected ? 1 : 0,
