@@ -105,9 +105,9 @@ internal static class OrderedPhysicalContactTests
             "Moving jaws or repeated cached feedback qualified contact without two settled fresh samples");
         Reject(() => execution.Step(duration + .26, Real(43) with { GripperFresh = false }, true, 0, 4),
             "Contact qualification ignored expired gripper feedback");
-        execution.Step(duration + .27, Real(47), true, 0, 5);
+        execution.Step(duration + .27, Real(41.4 + OrderedSimulationExecution.SoftContactAgreementMm + .1), true, 0, 5);
         Check(execution.QualifiedContactOpeningMm is null && execution.CompletedCursor == 0,
-            "The physical latch bypassed the bounded initial source contact 5mm qualification");
+            "The physical latch bypassed the bounded initial source contact qualification window");
 
         execution = Scenario(); time = 0; Finish(execution, ref time, 38.13, 0);
         Check(execution.CompletedCursor == 2 && execution.QualifiedContactOpeningMm == 38.13 && execution.ExpectedMeasuredOpeningMm == 38.13,

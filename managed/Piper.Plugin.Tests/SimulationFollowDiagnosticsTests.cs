@@ -30,10 +30,10 @@ internal static class SimulationFollowDiagnosticsTests
             Math.Abs(ordered.EndpointJointErrorsDegrees[1] - .009) < 1e-9,
             "Queued diagnostics copied the completed leader home pose or retained mutable hardware arrays");
         Check(ordered.ExpectedOpeningMm == 41.4 && ordered.ActualOpeningMm == 38.13 && ordered.EndpointCommandOpeningMm == 36 &&
-            ordered.OpeningToleranceMm == 5 && ordered.RequiresPhysicalContactCandidate && ordered.ActualPhysicalContactCandidate && !ordered.ArmStationary,
+            ordered.OpeningToleranceMm == OrderedSimulationExecution.SoftContactAgreementMm && ordered.RequiresPhysicalContactCandidate && ordered.ActualPhysicalContactCandidate && !ordered.ArmStationary,
             "Queued diagnostics omitted the actual contact window, candidate and stationary arrival requirements");
         string description = ordered.Describe();
-        Check(description.Contains("Pika 38.1 mm; expected 41.4 ±5.0 mm (command 36.0 mm)", StringComparison.Ordinal) &&
+        Check(description.Contains($"Pika 38.1 mm; expected 41.4 ±{OrderedSimulationExecution.SoftContactAgreementMm:0.0} mm (command 36.0 mm)", StringComparison.Ordinal) &&
             description.Contains("J2 0.01°", StringComparison.Ordinal) && description.Contains("arm stationary no", StringComparison.Ordinal),
             "Ordered timeout details did not explain the actual jaw/arm discrepancy in readable units");
         // A roll joint (J4, J6) is allowed more at an endpoint, so the joint named is the one furthest

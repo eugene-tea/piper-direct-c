@@ -128,7 +128,7 @@ internal static class OrderedMissedGraspTests
                     "The exact44.4/42.9mm live gray-band case did not complete its unchanged home cycle");
             }
         }
-        foreach (double actual in new[] { 41.8999, 50.2001 })
+        foreach (double actual in new[] { 41.8999, 45.2 + OrderedSimulationExecution.SoftContactAgreementMm + .0001 })
         {
             var outside = new OrderedSimulationExecution(first, Real(80), 1);
             outside.Path.Append(Cycle().Select(frame => frame with
@@ -140,7 +140,7 @@ internal static class OrderedMissedGraspTests
             double end = outside.ActivePhase!.DurationSeconds;
             outside.Step(end + .001, Real(actual), true, 0, 2); outside.Step(end + .12, Real(actual), true, 0, 3);
             Check(outside.CompletedCursor == 0 && !outside.PhysicalGraspMissed && outside.QualifiedContactOpeningMm is null,
-                "Initial gray-band handling accepted more than 1mm undershoot or widened the 5mm source contact window");
+                "Initial gray-band handling accepted more than 1mm undershoot or widened the soft source contact window");
             Reject(() => outside.Step(end + 15.01, Real(actual), true, 0, 4),
                 "An unexplained close outside both existing endpoint/contact bounds bypassed its deadline");
         }

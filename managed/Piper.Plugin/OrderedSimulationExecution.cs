@@ -13,6 +13,8 @@ public sealed class OrderedSimulationExecution
     /// contact-loss and source-lease windows, so a real slip still stops within a quarter second.</summary>
     internal const double JawGlitchToleranceSeconds = .250;
     private double jawViolationBegan = double.NaN;
+    /// <summary>Real minus simulated opening when the current contact qualified.</summary>
+    private double contactSourceOffsetMm;
     public OrderedSimulationPath Path { get; }
     public OrderedSimulationPhase? ActivePhase { get; private set; }
     public OrderedSimulationTarget Target { get; private set; }
@@ -33,7 +35,11 @@ public sealed class OrderedSimulationExecution
     public double ExpectedMeasuredOpeningMm => jaw.Resolved ? jaw.Opening : (ActivePhase is { } phase && Opening(phase)
         ? phase.End.CommandOpeningMm : ActivePhase?.ExpectedMeasuredOpeningMm ?? expectedOpening);
     public bool RequiresPhysicalContactCandidate => ActivePhase is { } phase && ClosingContact(phase);
-    public double OpeningArrivalToleranceMm => RequiresPhysicalContactCandidate ? 5 : 2;
+    public double OpeningArrivalToleranceMm => RequiresPhysicalContactCandidate ? SoftContactAgreementMm : 2;
+    /// <summary>How far a real closing contact may differ from the simulated one and still qualify.
+    /// Contact itself is proven separately: the real jaw must stay more than 2 mm above its close
+    /// command. 15 mm covers a soft real tube against a looser simulated grasp (36 vs 48 mm observed).</summary>
+    internal const double SoftContactAgreementMm = 15;
     private (long Request, long Sequence)? native; // Null until the first scoped reference.
     private readonly string limits;
 
@@ -106,6 +112,15 @@ public sealed class OrderedSimulationExecution
             // below still detects any actual change from that reference.
             low = high = jaw.Opening;
         }
+        else if (jaw.Kind == JawReferenceKind.Contact && jaw.Command == Target.OpeningMm)
+        {
+            // A qualified real grasp on a soft object can sit well inside the simulated
+            // contact (observed: real 36 mm, simulated 48 mm on the same tube). While the
+            // same close command holds, track the simulation shifted by the offset measured
+            // when the grasp qualified, so a later simulated slip still trips the 10 mm
+            // backstop; the 2 mm continuity guard below still stops on any real slip.
+            low = high = sourceExpected + contactSourceOffsetMm;
+        }
         bool outsidePhase = hardware.GripperOpeningMm < low - SimulationFollowPolicy.TrackingGripperToleranceMm ||
             hardware.GripperOpeningMm > high + SimulationFollowPolicy.TrackingGripperToleranceMm;
         bool leftReference = jaw.Resolved && !QualifyingLostContact && Math.Abs(hardware.GripperOpeningMm - jaw.Opening) > 2;
@@ -156,13 +171,14 @@ public sealed class OrderedSimulationExecution
             }
             else if (ClosingContact(phase))
             {
-                // A bounded 5mm initial model-agreement window accommodates soft
+                // A bounded SoftContactAgreementMm model-agreement window accommodates soft
                 // contact differences; both source and actual aperture must be
                 // strictly>command+2mm. Fresh settled samples still apply.
                 // Preserve actual aperture for this exact command;
                 // variation in soft simulated contact must not demand squeezing
                 // the real object further. Aperture alone does not prove a grasp.
                 jaw = new(JawReferenceKind.Contact, hardware.GripperOpeningMm, phase.End.CommandOpeningMm);
+                contactSourceOffsetMm = hardware.GripperOpeningMm - phase.ExpectedMeasuredOpeningMm;
             }
             else if (Opening(phase))
             {
