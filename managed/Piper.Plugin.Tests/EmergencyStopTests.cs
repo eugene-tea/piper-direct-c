@@ -19,6 +19,8 @@ internal static class EmergencyStopTests
             await fixture.Event(Wire("safety.accept"), default);
             Check(!fixture.Plugin.approved && fixture.Rpc.Routes.IsEmpty,
                 "An Enable acknowledgement without a presented prompt reached the hardware transport");
+            // Feedback older than 500 ms is stale and refuses Enable; a cold, slow runner can spend that long above.
+            fixture.RefreshFeedback();
             await fixture.Event(Wire("enable"), default);
             var opened = fixture.Authority.Current.Confirmation;
             string oldAccept = Wire("safety.accept");
@@ -480,6 +482,8 @@ internal static class EmergencyStopTests
         public RobotCommandAuthority Authority => plugin.CommandAuthority;
         public SemaphoreSlim Commands => plugin.commands;
         public Task Event(string wire, CancellationToken cancellation) => plugin.HandleEventAsync(new("fixture", wire, "click", JsonSerializer.SerializeToElement(true)), cancellation);
+        /// <summary>The same controller sample, received now: keeps a check from depending on how fast the runner is.</summary>
+        public void RefreshFeedback() => plugin.telemetry.Publish(new(plugin.telemetry.State!, "fake-backend-session", 1, Stopwatch.GetTimestamp(), 0));
 
         public Fixture(Func<object, CancellationToken, Task>? send = null)
         {
