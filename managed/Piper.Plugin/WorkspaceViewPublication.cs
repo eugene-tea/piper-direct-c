@@ -82,6 +82,7 @@ public sealed partial class PipersPlugin
                 patch => WorkspaceEventScope.Wrap(scope.Epoch, scope.Context.Profile, patch.Key),
                 patch => patch.Value);
             await engine.PatchAsync(Panel, scoped, cancellation);
+            workspace.Mirror.Apply(scoped);
         }
         finally { workspace.PublicationGate.Release(); }
     }
@@ -149,6 +150,7 @@ public sealed partial class PipersPlugin
                     .Select(camera => (camera["entityId"]!.GetValue<string>(), camera["name"]?.GetValue<string>() ?? "Camera")).ToArray() ?? []);
             var tree = ScopeRobotWidget(BuildWorkspaceView(confirmation is not null, cameraChoices), candidate, context.Profile);
             await engine.PublishViewAsync(Panel, tree, ct);
+            workspace.Mirror.Replace(tree);
             var current = ActiveProfile;
             if (context != CurrentWorkspaceViewContext || profile.Id != context.Profile || profile.Id != current.Id ||
                 profile.CanDeviceId != current.CanDeviceId || profile.PikaDevice != current.PikaDevice || profile.WslDistribution != current.WslDistribution)

@@ -318,6 +318,17 @@ Raw depth and device timestamps are not yet included in a dataset recorder.
 All three cameras belong in the later
 timestamp-aligned recorder.
 
+## Agent access (MCP, opt-in)
+
+Set `PIPERS_MCP=1` (or a port number) in the editor's environment and the plugin serves an MCP endpoint on `http://127.0.0.1:19340/mcp` (streamable HTTP, JSON responses). It is off by default.
+
+- **Auth:** a bearer token, created once in the plugin settings directory as `mcp-token` (mode 0600). A request with any non-loopback `Origin` header is refused.
+- **Reading:** `pipers_status` (server, robots, Follow, last failure, every red error), `pipers_ui` (outline of the visible panel by widget id), `pipers_wait` (block until a widget's text or tone matches), `pipers_last_failure` (newest simulation-follow diagnostics, reduced). The panel content comes from `WorkspaceComponent.Mirror`: the last tree the host accepted plus its patches, recorded inside the publication gate.
+- **Acting:** `pipers_click` sends the same `UiEvent` a mouse click sends, through `HandleEventAsync`, so STOP, the Disable confirmation, group-follow blocking, the UI actor queue and permission epochs all apply unchanged. Labels, containers, hidden and disabled widgets cannot be pressed, and `engine.*` streams are never accepted.
+- **Operator go:** stops (`stop`, sidebar `stop.*`, `simulation.stop`, `motion.hold`, `group.follow.cancel`), navigation (`workspace.*`, `profiles.select.*`) and `backend.start`/`check`/`restart`/`restart.cancel` are free. Every other action needs `confirm: true`, which an agent may send only after the human said go for that step (`PipersMcpPolicy`). Agent clicks appear in the journal as `Click received (agent…)`.
+
+Claude Code: `claude mcp add --transport http --scope local pipers http://127.0.0.1:19340/mcp --header "Authorization: Bearer $(cat <settings>/mcp-token)"`.
+
 ## Install and build
 
 Use a Lucky Engine build with plugin API 1. Obtain the public SDK `.nupkg` from

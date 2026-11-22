@@ -9,10 +9,14 @@ namespace LuckyRobots.Piper.Plugin;
 ///   Events        Plugin-6 UI dispatch actor       UiEventDispatch (its states), below (the reference)
 ///   Loops         background loops                 LoopSupervision
 ///   StopFollowUp  detached work after a STOP       StopFollowUpQueue
+///   Agent         loopback MCP endpoint            PipersMcp (on when the editor serves MCP)
 ///
 ///   field   written by                                  readers see
 ///   events  plugin start (Open), once, before the       the actor, or null before start
 ///           first view is published (B13)               (isolated fixtures run handlers inline)
+///   agent   plugin start (OpenAgent), once, after the   the endpoint, or null when the editor
+///           start-up clicks are accepted; disposal       serves no MCP; its clicks enter the UI actor
+///           (TakeAgent)                                  through HandleEventAsync like any click
 /// </code>
 /// <b>Relation to <see cref="RobotCommandAuthority"/>.</b> The authority stays
 /// the only owner of permission epochs. Nothing here grants motion, and no
@@ -32,7 +36,21 @@ internal sealed class ShellComponent
     public LoopSupervision Loops { get; } = new();
     public StopFollowUpQueue StopFollowUp { get; } = new();
 
+    private PipersMcp? agent;
+
     public UiEventDispatch? Events => Volatile.Read(ref events);
+    public PipersMcp? Agent => Volatile.Read(ref agent);
+
+    /// <summary>Installs the agent endpoint. There is at most one for the plugin's lifetime.</summary>
+    public void OpenAgent(PipersMcp endpoint)
+    {
+        ArgumentNullException.ThrowIfNull(endpoint);
+        if (Interlocked.CompareExchange(ref agent, endpoint, null) is not null)
+            throw new InvalidOperationException("The agent endpoint is already installed.");
+    }
+
+    /// <summary>Removes the agent endpoint for disposal; null when none was installed.</summary>
+    public PipersMcp? TakeAgent() => Interlocked.Exchange(ref agent, null);
 
     /// <summary>Installs the UI actor. There is one for the plugin's lifetime.</summary>
     public void Open(UiEventDispatch dispatch)

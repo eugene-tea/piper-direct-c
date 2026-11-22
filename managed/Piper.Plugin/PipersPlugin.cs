@@ -97,6 +97,14 @@ public sealed partial class PipersPlugin : ILuckyPlugin
         Trace.TraceInformation("Startup: view published; starting cameras.");
         foreach (string camera in new[] { "bench", "gripper", "depth" }) await RestartCamera(camera);
         Trace.TraceInformation("Startup complete; accepting clicks.");
+        try
+        {
+            using var discovery = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            discovery.CancelAfter(2000);
+            if (PipersMcp.EditorOffersAgents(await engine.RequestAsync("host.info", cancellation: discovery.Token)))
+                shell.OpenAgent(PipersMcp.Start(this, engine.Start.SettingsDirectory));
+        }
+        catch (Exception error) { Trace.TraceWarning("Agent access (MCP) did not start: {0}", error.Message); }
     }
 
     private JsonObject Device(string? expectedDeviceId = null, long? expectedGeneration = null, string? expectedToken = null,
@@ -774,6 +782,7 @@ public sealed partial class PipersPlugin : ILuckyPlugin
 
     public async ValueTask DisposeAsync()
     {
+        if (shell.TakeAgent() is { } agent) await Quietly(agent.DisposeAsync().AsTask(), "Agent access");
         var cameraRetirement = calibration.Capture.Retire();
         passiveMeasuredTrackingStarted = false;
         await Quietly(ct => StopGroupSimulationFollowing("Plugin closed · following stopped", ct), TimeSpan.FromSeconds(8), "Group following");

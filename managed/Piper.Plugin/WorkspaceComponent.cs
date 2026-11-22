@@ -37,6 +37,9 @@ internal sealed record PublishedWorkspaceView(long Epoch, WorkspaceViewContext C
 ///                  PrimaryAction)                                   immutable PrimaryActionState
 ///   Replay         the UI actor and the telemetry loop, through     one volatile reference to an
 ///                  its compare-and-swap (ReplayReviewSession)       immutable ReplayReview
+///   Mirror         the gate holder, right after the host accepted   copies taken under the mirror's
+///                  a view (Replace) or a patch (Apply)              own short lock (agent tools only;
+///                                                                   STOP never reads it)
 /// </code>
 /// Plugin-1: <c>Navigate(candidate)</c> yields a value, the shell runs the guards
 /// and cleanup, and <see cref="Commit"/> adopts it inside the gate just before
@@ -61,6 +64,9 @@ internal sealed class WorkspaceComponent
 
     /// <summary>Plugin-I: the loaded replay episode and what was checked against it.</summary>
     public ReplayReviewSession Replay { get; } = new();
+
+    /// <summary>What the panel shows: the last accepted tree with its later patches, for agent tools.</summary>
+    public UiMirror Mirror { get; } = new();
 
     /// <summary>The committed page. It may be ahead of <see cref="Published"/> while its view is being sent.</summary>
     public WorkspaceNavigation Navigation => navigation;
